@@ -1,0 +1,466 @@
+/**
+ * 브라우저 E2E 테스트 (Playwright + Vite 개발 서버).
+ *   npm run test:e2e            결과만 출력
+ *   E2E_SHOTS=dir npm run test:e2e   스크린샷도 저장
+ * 개발 모드에서만 노출되는 window.__arabicVillage 훅을 사용한다.
+ */
+import { chromium } from 'playwright';
+import { createServer } from 'vite';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import fs from 'node:fs';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const SHOTS = process.env.E2E_SHOTS;
+if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
+const T = 32;
+const C = (n) => n * T + T / 2;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const results = [];
+function check(name, ok, detail = '') {
+  results.push({ name, ok });
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
+}
+async function shot(page, name) {
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${name}.png`) });
+}
+
+// 페이지 안 도우미
+const HELPERS = () => {
+  window.dispatchEvent(new Event('focus')); // 헤드리스에서 Phaser가 프레임 간격을 줄이지 않게
+  window.__t = {
+    av: () => window.__arabicVillage,
+    scene() { return this.av().game.scene.getScenes(true)[0]; },
+    feet() { const p = this.scene().player.feet; return { x: p.x, y: p.y }; },
+    moving() { return this.scene().player.isMoving; },
+    camKey() { const c = this.scene().cameras.main; return `${c.scrollX.toFixed(1)},${c.scrollY.toFixed(1)}`; },
+    toScreen(wx, wy) {
+      const s = this.scene(); const cam = s.cameras.main; const r = s.game.canvas.getBoundingClientRect();
+      return { x: r.left + (wx - cam.worldView.x) * cam.zoom, y: r.top + (wy - cam.worldView.y) * cam.zoom };
+    },
+    startTrace() {
+      const s = this.scene(); this.trace = [];
+      this._fn = () => { const p = s.player.feet; const b = s.player.body; this.trace.push({ vx: b.velocity.x, vy: b.velocity.y, fits: s.grid.bodyFits(p) }); };
+      s.events.on('postupdate', this._fn);
+    },
+    stopTrace() { this.scene().events.off('postupdate', this._fn); return this.trace; },
+    rec(id) { return this.av().learning().get(id); },
+  };
+};
+
+async function inject(page) { await page.evaluate(HELPERS); }
+async function camSettle(page) {
+  let prev = null;
+  for (let i = 0; i < 50; i++) { const k = await page.evaluate(() => __t.camKey()); if (k === prev) return; prev = k; await sleep(60); }
+}
+async function waitStill(page, timeout = 20000) {
+  const t0 = Date.now();
+  await sleep(120);
+  while (Date.now() - t0 < timeout) {
+    if (!(await page.evaluate(() => __t.moving()))) { await camSettle(page); return true; }
+    await sleep(50);
+  }
+  return false;
+}
+async function clickWorld(page, wx, wy, tap = false) {
+  await camSettle(page);
+  const p = await page.evaluate(([x, y]) => __t.toScreen(x, y), [wx, wy]);
+  const vp = page.viewportSize();
+  if (p.x < 0 || p.y < 0 || p.x > vp.width || p.y > vp.height) throw new Error(`화면 밖 클릭 (${wx},${wy})`);
+  if (tap) await page.touchscreen.tap(p.x, p.y); else await page.mouse.click(p.x, p.y);
+}
+async function moveTo(page, wx, wy) {
+  await page.evaluate(([x, y]) => __t.scene().walkTo({ x, y }), [wx, wy]);
+  await waitStill(page);
+}
+async function startGame(page, name = '') {
+  await page.waitForSelector('#player-name');
+  if (name) await page.fill('#player-name', name);
+  await page.click('button[type=submit]');
+  await page.waitForFunction(() => window.__arabicVillage?.game.scene.isActive('village'));
+  await inject(page);
+  await sleep(500);
+}
+async function waitScene(page, key) {
+  await page.waitForFunction((k) => window.__arabicVillage.game.scene.isActive(k), key, { timeout: 20000 });
+  await sleep(400);
+  await inject(page);
+}
+/** 마을 → 집 → 책상 → 공부 메뉴 */
+async function openStudy(page, tap = false) {
+  if (await page.evaluate(() => window.__arabicVillage.game.scene.isActive('village'))) {
+    await moveTo(page, C(6), C(7));
+    await clickWorld(page, C(6), 5 * T + 10, tap);
+    await waitScene(page, 'house');
+  }
+  await clickWorld(page, 6 * T, 2 * T + 10, tap);
+  await page.waitForSelector('.study', { timeout: 20000 });
+}
+const statValues = (page) => page.$$eval('.study__stats .stat__value', (els) => els.map((e) => e.textContent));
+
+/** 가짜 아랍어 음성 (재생 상태 UI 검증용). 실제 음성 유무는 별도 시나리오에서 확인한다. */
+const FAKE_SPEECH = () => {
+  const log = (window.__speechLog = []);
+  let active = null;
+  const synth = {
+    getVoices: () => [{ name: 'Fake Arabic', lang: 'ar-SA', localService: true }],
+    addEventListener() {}, removeEventListener() {},
+    speak(u) { log.push('speak:' + u.text); if (active) log.push('OVERLAP'); active = u; setTimeout(() => active === u && u.onstart && u.onstart(), 10); },
+    cancel() { log.push('cancel'); const u = active; active = null; if (u && u.onerror) u.onerror({ error: 'interrupted' }); },
+    get speaking() { return !!active; },
+  };
+  Object.defineProperty(window, 'speechSynthesis', { value: synth, configurable: true });
+  // 실제 SpeechSynthesisUtterance는 진짜 음성 객체만 받으므로 가짜 발화 객체도 함께 바꾼다.
+  window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; this.lang = ''; this.voice = null; this.rate = 1; } };
+};
+
+async function main() {
+  const server = await createServer({ root: ROOT, logLevel: 'error', server: { port: 0, host: '127.0.0.1' } });
+  await server.listen();
+  const URL = server.resolvedUrls.local[0];
+  const browser = await chromium.launch();
+  const errors = [];
+  const watch = (page, tag) => {
+    page.on('pageerror', (e) => errors.push(`${tag}: ${e}`));
+    page.on('console', (m) => m.type() === 'error' && errors.push(`${tag}: ${m.text()}`));
+  };
+
+  try {
+    // ═════ 1. 회귀: 이동·충돌·대화·집 출입 ═════
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await ctx.newPage();
+    watch(page, 'desktop');
+    await page.goto(URL);
+    await startGame(page);
+    check('[회귀] 빈 이름 → 기본 이름', (await page.textContent('#hud-name')) === '유학생');
+
+    await page.evaluate(() => __t.startTrace());
+    await clickWorld(page, C(10), C(10));
+    await waitStill(page);
+    let tr = await page.evaluate(() => __t.stopTrace());
+    let end = await page.evaluate(() => __t.feet());
+    const speeds = tr.filter((p) => p.vx || p.vy).map((p) => Math.hypot(p.vx, p.vy));
+    check('[회귀] 대각선 클릭 이동 + 일정 속도 + 정지', tr.some((p) => Math.abs(p.vx) > 1 && Math.abs(p.vy) > 1) && speeds.every((s) => Math.abs(s - 110) < 0.5) && Math.hypot(end.x - C(10), end.y - C(10)) < 1.5, JSON.stringify(end));
+
+    await moveTo(page, C(13), C(11));
+    await page.evaluate(() => __t.startTrace());
+    await clickWorld(page, C(16), C(12));
+    await waitStill(page);
+    tr = await page.evaluate(() => __t.stopTrace());
+    check('[회귀] 장애물(우물) 우회, 겹침 없음', tr.length > 0 && tr.every((p) => p.fits));
+
+    await moveTo(page, C(6), C(7));
+    await page.evaluate(() => __t.scene().player.walk([{ x: 6 * 32 + 16, y: 3 * 32 + 16 }]));
+    await sleep(1500);
+    end = await page.evaluate(() => __t.feet());
+    check('[회귀] Arcade 충돌: 집 벽 통과 불가', end.y >= 192, JSON.stringify(end));
+    await page.evaluate(() => __t.scene().player.halt());
+
+    const before = await page.evaluate(() => __t.feet());
+    await clickWorld(page, C(5), C(4));
+    await sleep(400);
+    const after = await page.evaluate(() => __t.feet());
+    check('[회귀] 건물 한가운데 클릭 → 이동 거부', Math.hypot(after.x - before.x, after.y - before.y) < 0.5 && (await page.textContent('#toast')).includes('갈 수 없어요'));
+
+    // 라일라 대화
+    await moveTo(page, C(15), C(13));
+    await clickWorld(page, C(17), C(11) - 4);
+    await page.waitForSelector('.dialogue', { timeout: 20000 });
+    const dlg = await page.evaluate(() => {
+      const ar = document.querySelector('.dialogue .ar--line');
+      return { ar: ar.textContent, dir: getComputedStyle(ar).direction, tag: document.querySelector('.learned-tag')?.textContent, listen: !!document.querySelector('.dialogue .btn-listen') };
+    });
+    check('[회귀] 주민 대화창 (아랍어 RTL)', dlg.ar === 'مَرْحَبًا!' && dlg.dir === 'rtl');
+    check('대화창: 듣기 버튼 + "책상에서 배울 수 있는 표현" 표시', dlg.listen && (dlg.tag ?? '').includes('배울 수 있는'), dlg.tag);
+    const p0 = await page.evaluate(() => __t.feet());
+    await page.mouse.click(200, 150);
+    await sleep(400);
+    const p1 = await page.evaluate(() => __t.feet());
+    check('[회귀] 대화 중 마을 클릭 무시', Math.hypot(p1.x - p0.x, p1.y - p0.y) < 0.01);
+
+    // 실제 브라우저 음성: 이 환경에서 아랍어 음성이 없으면 안내가 나와야 한다
+    const realVoice = await page.evaluate(async () => {
+      const v = speechSynthesis.getVoices();
+      return { total: v.length, arabic: v.filter((x) => x.lang.startsWith('ar')).length };
+    });
+    await page.click('.dialogue .btn-listen');
+    await page.waitForFunction(() => document.querySelector('#toast').classList.contains('is-visible'), null, { timeout: 8000 }).catch(() => {});
+    const toast = await page.textContent('#toast');
+    check(`실제 음성 확인 (음성 ${realVoice.total}개, 아랍어 ${realVoice.arabic}개) → 재생 불가 안내`, realVoice.arabic > 0 || toast.includes('아랍어 음성이 없어요'), toast);
+    await shot(page, '01-dialogue');
+    for (let i = 0; i < 6 && (await page.$('.dialogue')); i++) await page.click('.dialogue .btn--primary');
+    check('[회귀] 대화 끝까지 진행 후 닫힘', !(await page.$('.dialogue')));
+
+    // ═════ 2. 책상 공부 메뉴 ═════
+    await moveTo(page, C(9), C(8));
+    await openStudy(page);
+    check('[회귀] 집 출입 + 책상 접근 → 공부 메뉴', true);
+    let stats = await statValues(page);
+    check('학습 현황: 기록 없음 상태 표시', stats[0] === '0 / 47' && stats[1] === '0 / 36' && stats[2] === '0' && stats[3].includes('인사와 안부'), stats.join(' | '));
+    await page.waitForFunction(() => !document.querySelector('.voice-status').textContent.includes('확인 중'));
+    const voiceStatus = await page.textContent('.voice-status');
+    check('음성 상태 안내 표시', voiceStatus.length > 5, voiceStatus);
+    await shot(page, '02-study-menu');
+    const before2 = await page.evaluate(() => __t.feet());
+    await page.mouse.click(30, 780);
+    await sleep(300);
+    check('공부 메뉴 열림 중 캐릭터 이동 없음', JSON.stringify(before2) === JSON.stringify(await page.evaluate(() => __t.feet())));
+
+    // 새 단어 배우기
+    await page.click('[data-topic=words]');
+    await page.waitForSelector('.lesson');
+    let hero = await page.evaluate(() => {
+      const h = document.querySelector('.ar--hero');
+      const cs = getComputedStyle(h);
+      return { id: h.dataset.itemId, text: h.textContent, dir: cs.direction, font: cs.fontFamily, lh: parseFloat(cs.lineHeight), fs: parseFloat(cs.fontSize), clipped: h.scrollHeight > h.clientHeight + 1, banner: !!document.querySelector('.new-banner') };
+    });
+    check('단어 학습: 첫 단어(모음 부호 포함) 표시', hero.id === 'w.marhaban' && hero.text === 'مَرْحَبًا' && hero.banner, JSON.stringify(hero));
+    check('아랍어 RTL + 웹폰트 + 넉넉한 줄 간격(부호 잘림 방지)', hero.dir === 'rtl' && hero.font.includes('Noto Naskh Arabic') && hero.lh >= hero.fs * 1.9 && !hero.clipped, `font-size ${hero.fs}px, line-height ${hero.lh}px`);
+    check('웹폰트 실제 로드', await page.evaluate(() => document.fonts.check('40px "Noto Naskh Arabic"', 'مَرْحَبًا')));
+    const reading = await page.textContent('.reading');
+    check('발음 보조·부호 없는 표기 표시', reading.includes('marḥaban') && reading.includes('마르하반') && reading.includes('مرحبا'), reading);
+    stats = await statValues(page);
+    check('처음 본 단어 → 단어 1 / 47, 복습 1', stats[0] === '1 / 47' && stats[2] === '1', stats.join(' | '));
+    await shot(page, '03-word');
+
+    for (let i = 0; i < 5; i++) await page.click('[data-nav=next]');
+    stats = await statValues(page);
+    const sixth = await page.getAttribute('.ar--hero', 'data-item-id');
+    check('다음 버튼으로 이동하며 학습 기록 (6개)', stats[0] === '6 / 47' && sixth === 'w.khayr', `${stats[0]} ${sixth}`);
+    await page.click('[data-nav=prev]');
+    await page.click('[data-nav=prev]');
+    stats = await statValues(page);
+    const back = await page.evaluate(() => ({ id: document.querySelector('.ar--hero').dataset.itemId, banner: !!document.querySelector('.new-banner') }));
+    check('이전 이동: 이미 배운 항목은 새로 세지 않음', stats[0] === '6 / 47' && back.id === 'w.sabah' && !back.banner, JSON.stringify(back));
+    await page.keyboard.press('ArrowRight');
+    check('키보드 → 로 다음 항목', (await page.getAttribute('.ar--hero', 'data-item-id')) === 'w.masa');
+    const examples = await page.$$eval('.related__row .ar', (els) => els.map((e) => e.textContent));
+    check('단어의 예문 표시', examples.some((e) => e.includes('مَسَاءَ')), examples.join(' / '));
+
+    // 새 문장 배우기
+    await page.click('text=메뉴로');
+    await page.click('[data-topic=sentences]');
+    await page.waitForSelector('.lesson');
+    const s1 = await page.evaluate(() => ({
+      id: document.querySelector('.ar--hero').dataset.itemId,
+      ko: document.querySelector('.ko--meaning').textContent,
+      keyWords: [...document.querySelectorAll('[data-word-id]')].map((e) => ({ id: e.dataset.wordId, text: e.textContent, listen: !!e.querySelector('.btn-listen') })),
+    }));
+    check('문장 학습: 원문·번역·핵심 단어(듣기 포함) 표시', s1.id === 's.marhaban' && s1.ko === '안녕하세요!' && s1.keyWords.length === 1 && s1.keyWords[0].listen && s1.keyWords[0].text.includes('✓'), JSON.stringify(s1));
+    for (let i = 0; i < 3; i++) await page.click('[data-nav=next]');
+    const s4 = await page.evaluate(() => ({ id: document.querySelector('.ar--hero').dataset.itemId, words: [...document.querySelectorAll('[data-word-id]')].map((e) => e.dataset.wordId) }));
+    check('문장 ↔ 단어 관계 유지 (صَبَاحَ الْخَيْرِ → 아침, 좋은 것)', s4.id === 's.sabah_khayr' && s4.words.join() === 'w.sabah,w.khayr', JSON.stringify(s4));
+    await shot(page, '04-sentence');
+    stats = await statValues(page);
+    check('문장 4개 학습 기록', stats[1] === '4 / 36', stats.join(' | '));
+
+    // 복습
+    await page.click('text=메뉴로');
+    await page.click('[data-topic=review]');
+    await page.waitForSelector('.review [data-index]');
+    const answerPositions = [];
+    const typesSeen = new Set();
+    let wrongChecked = false;
+    let correctChecked = false;
+    for (let round = 0; round < 3; round++) {
+      for (let q = 0; q < 12; q++) {
+        const info = await page.evaluate(() => {
+          const sec = document.querySelector('.review[data-question-item]');
+          if (!sec) return null;
+          const choices = [...sec.querySelectorAll('[data-index]')].map((b) => b.dataset.itemId);
+          return { item: sec.dataset.questionItem, type: sec.dataset.questionType, choices };
+        });
+        if (!info) break;
+        typesSeen.add(info.type);
+        const answerIdx = info.choices.indexOf(info.item);
+        answerPositions.push(answerIdx);
+        const beforeRec = await page.evaluate((id) => __t.rec(id), info.item);
+        // 번갈아 오답/정답을 고른다
+        const pickWrong = (answerPositions.length % 2 === 1);
+        const pick = pickWrong ? (answerIdx + 1) % info.choices.length : answerIdx;
+        await page.click(`.review [data-index="${pick}"]`);
+        const fb = await page.evaluate(() => ({
+          title: document.querySelector('.feedback__title')?.textContent ?? '',
+          answer: document.querySelector('.feedback__answer .ar')?.textContent ?? '',
+          correctBtn: document.querySelector('.choice.is-correct')?.dataset.index,
+          wrongBtn: document.querySelector('.choice.is-wrong')?.dataset.index,
+          disabled: [...document.querySelectorAll('.choice')].every((b) => b.disabled),
+        }));
+        const afterRec = await page.evaluate((id) => __t.rec(id), info.item);
+        if (pickWrong && !wrongChecked) {
+          wrongChecked = true;
+          check('오답 선택 → 정답 표시·해설, 기록은 유지(오답 +1)', fb.title.includes('아쉬워요') && fb.answer.length > 0 && fb.correctBtn === String(answerIdx) && fb.wrongBtn === String(pick) && fb.disabled && afterRec.wrong === beforeRec.wrong + 1 && afterRec.firstStudiedAt === beforeRec.firstStudiedAt, JSON.stringify(fb));
+          await shot(page, '05-review-wrong');
+        }
+        if (!pickWrong && !correctChecked) {
+          correctChecked = true;
+          check('정답 선택 → 정답 표시, 정답 +1', fb.title.includes('정답이에요') && afterRec.correct === beforeRec.correct + 1, JSON.stringify(fb));
+        }
+        await page.click('[data-role=next]');
+      }
+      await page.waitForSelector('.review--summary');
+      if (round === 0) {
+        const summary = await page.textContent('.summary__score');
+        check('복습 결과 화면 (벌점 없음)', /문제 중 \d+문제 정답/.test(summary), summary);
+        await shot(page, '06-review-summary');
+      }
+      await page.click('[data-role=again]');
+      await page.waitForSelector('.review [data-index]');
+    }
+    const posCounts = [0, 1, 2, 3].map((i) => answerPositions.filter((p) => p === i).length);
+    check(`정답 위치 무작위 (${answerPositions.length}문제: ${posCounts.join('/')})`, posCounts.filter((c) => c > 0).length >= 3 && Math.max(...posCounts) < answerPositions.length * 0.6);
+    check(`복습 문제 유형 혼합 (${[...typesSeen].join(', ')})`, typesSeen.size >= 3);
+
+    // 프로필 (AI 회화용)
+    const profile = await page.evaluate(() => {
+      const p = window.__arabicVillage.getLearnerProfile();
+      return { encountered: p.encountered.length, reviewed: p.reviewed.length, comfortable: p.comfortable.length, needsReview: p.needsReview.length, unit: p.currentUnit.id };
+    });
+    check('학습자 프로필: 본 표현/복습한 표현/익숙한 표현 구분', profile.encountered === 10 && profile.reviewed > 0 && profile.comfortable <= profile.reviewed, JSON.stringify(profile));
+
+    // 모음 부호 표시 검사: 모든 학습 문자열의 실제 글리프(위·아래 부호 포함)가 CSS 줄 상자 안에 들어오는지 측정
+    const glyphReport = await page.evaluate(async () => {
+      const { ALL_ITEMS } = await import('/src/learning/content/index.ts');
+      await document.fonts.load('700 40px "Noto Naskh Arabic"');
+      await document.fonts.load('400 40px "Noto Naskh Arabic"');
+      const ctx2d = document.createElement('canvas').getContext('2d');
+      // [이름, 굵기, 글자 크기(px), CSS line-height 배수] — main.css와 같은 값
+      const styles = [['hero-word', 700, 57.6, 2], ['hero-sentence', 700, 40, 2], ['row', 400, 23.2, 2], ['choice', 400, 23.2, 2]];
+      const problems = [];
+      let checked = 0;
+      for (const item of ALL_ITEMS) {
+        for (const [name, weight, size, lh] of styles) {
+          if (name === 'hero-word' && item.kind !== 'word') continue;
+          if (name === 'hero-sentence' && item.kind !== 'sentence') continue;
+          ctx2d.font = `${weight} ${size}px "Noto Naskh Arabic"`;
+          ctx2d.direction = 'rtl';
+          const m = ctx2d.measureText(item.ar);
+          const half = (size * lh - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2;
+          checked++;
+          if (m.actualBoundingBoxAscent > m.fontBoundingBoxAscent + half || m.actualBoundingBoxDescent > m.fontBoundingBoxDescent + half) {
+            problems.push(`${item.id}/${name}: ink ${m.actualBoundingBoxAscent.toFixed(1)}+${m.actualBoundingBoxDescent.toFixed(1)} > line ${(size * lh).toFixed(1)}`);
+          }
+        }
+      }
+      return { checked, problems };
+    });
+    check(`모음 부호가 줄 상자 안에 표시됨 (${glyphReport.checked}개 측정)`, glyphReport.checked > 150 && glyphReport.problems.length === 0, glyphReport.problems.slice(0, 5).join(' | '));
+
+    // 마을로 복귀 → 대화창 표시 변화
+    await page.click('text=그만하기');
+    await page.click('text=마을로 돌아가기');
+    await waitScene(page, 'village');
+    check('[회귀] 공부 메뉴에서 마을로 복귀', true);
+    await moveTo(page, C(15), C(13));
+    await clickWorld(page, C(17), C(11) - 4);
+    await page.waitForSelector('.dialogue', { timeout: 20000 });
+    const tag2 = await page.textContent('.learned-tag');
+    check('배운 뒤 대화창: "책상에서 배운 표현" 표시', tag2.includes('배운 표현이에요'), tag2);
+    await page.click('.dialogue .btn:not(.btn--primary):not(.btn-listen)');
+
+    // ═════ 3. 저장·복원 ═════
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('arabic-village:v1')));
+    await page.reload();
+    await page.waitForSelector('#player-name');
+    check('새로고침 후 이름 유지', (await page.inputValue('#player-name')) === '유학생');
+    await startGame(page);
+    await openStudy(page);
+    const stats2 = await statValues(page);
+    check('새로고침 후 학습 진도 복원', saved.version === 2 && Object.keys(saved.learning.items).length === 10 && stats2[0] === '6 / 47' && stats2[1] === '4 / 36', stats2.join(' | '));
+    await page.click('[data-topic=words]');
+    check('이어서 배우기: 아직 안 배운 첫 단어부터', (await page.getAttribute('.ar--hero', 'data-item-id')) === 'w.nur');
+    await page.keyboard.press('Escape');
+    check('Esc로 공부 메뉴 닫기', !(await page.$('.study')));
+    await ctx.close();
+
+    // ═════ 4. 1단계 저장 데이터 이전 ═════
+    const ctxOld = await browser.newContext();
+    await ctxOld.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('arabic-village:v1', JSON.stringify({ playerName: '옛 이름' })); sessionStorage.setItem('seeded', '1'); } });
+    const pOld = await ctxOld.newPage();
+    watch(pOld, 'migrate');
+    await pOld.goto(URL);
+    await pOld.waitForSelector('#player-name');
+    const oldName = await pOld.inputValue('#player-name');
+    await startGame(pOld);
+    const migrated = await pOld.evaluate(() => JSON.parse(localStorage.getItem('arabic-village:v1')));
+    check('1단계 저장 데이터(이름만) → 2단계로 이전', oldName === '옛 이름' && migrated.version === 2 && migrated.playerName === '옛 이름' && typeof migrated.learning === 'object', JSON.stringify(migrated).slice(0, 80));
+    await ctxOld.close();
+
+    // ═════ 5. 음성 재생 상태 (가짜 아랍어 음성 주입) ═════
+    const ctxSp = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctxSp.addInitScript(FAKE_SPEECH);
+    const sp = await ctxSp.newPage();
+    watch(sp, 'speech');
+    await sp.goto(URL);
+    await startGame(sp);
+    await openStudy(sp);
+    await sp.waitForFunction(() => document.querySelector('.voice-status').textContent.includes('Fake Arabic'));
+    await sp.click('[data-topic=words]');
+    await sp.click('.hero .btn-listen');
+    await sp.waitForSelector('.hero .btn-listen.is-playing');
+    const log1 = await sp.evaluate(() => [...window.__speechLog]);
+    check('듣기 → 원문(모음 부호 포함) 그대로 재생, 재생 중 표시', log1.includes('speak:مَرْحَبًا'), log1.join(','));
+    await sp.click('.hero .btn-listen');
+    await sp.waitForFunction(() => !document.querySelector('.hero .btn-listen.is-playing'));
+    check('재생 중 같은 버튼 → 정지', (await sp.evaluate(() => window.__speechLog)).at(-1) === 'cancel');
+    await sp.click('.hero .btn-listen');
+    await sp.waitForSelector('.hero .btn-listen.is-playing');
+    await sp.click('[data-nav=next]');
+    await sleep(100);
+    check('다음 항목으로 이동하면 이전 음성 정지', !(await sp.$('.btn-listen.is-playing')) && (await sp.evaluate(() => window.__speechLog.at(-1))) === 'cancel');
+    await sp.click('.hero .btn-listen');
+    await sp.waitForSelector('.hero .btn-listen.is-playing');
+    await sp.click('.related__row .btn-listen');
+    await sleep(100);
+    const states = await sp.evaluate(() => [...document.querySelectorAll('.btn-listen.is-playing')].length);
+    check('다른 듣기 버튼 → 이전 음성을 끊고 하나만 재생', states === 1 && !(await sp.evaluate(() => window.__speechLog.includes('OVERLAP'))));
+    await sp.keyboard.press('Escape');
+    await sleep(50);
+    check('공부 메뉴를 닫으면 음성 정지', (await sp.evaluate(() => window.__speechLog.at(-1))) === 'cancel');
+    await ctxSp.close();
+
+    // ═════ 6. 모바일 (터치) ═════
+    const ctxM = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+    const m = await ctxM.newPage();
+    watch(m, 'mobile');
+    await m.goto(URL);
+    await m.waitForSelector('#player-name');
+    await m.fill('#player-name', '민지');
+    await m.tap('button[type=submit]');
+    await m.waitForFunction(() => window.__arabicVillage?.game.scene.isActive('village'));
+    await inject(m);
+    await sleep(500);
+    await openStudy(m, true);
+    await m.tap('[data-topic=words]');
+    await m.waitForSelector('.lesson');
+    const layout = await m.evaluate(() => {
+      const card = document.querySelector('.study').getBoundingClientRect();
+      const btns = [...document.querySelectorAll('.lesson__nav .btn, .hero .btn-listen')].map((b) => b.getBoundingClientRect().height);
+      return { left: card.left, right: card.right, vw: innerWidth, docW: document.documentElement.scrollWidth, minBtn: Math.min(...btns) };
+    });
+    check('모바일: 공부 화면이 화면 안에, 가로 스크롤 없음, 버튼 높이 ≥ 40px', layout.left >= 0 && layout.right <= layout.vw && layout.docW <= layout.vw && layout.minBtn >= 40, JSON.stringify(layout));
+    await shot(m, '07-mobile-word');
+    await m.tap('[data-nav=next]');
+    await m.tap('text=메뉴로');
+    await m.tap('[data-topic=review]');
+    await m.waitForSelector('.review [data-index]');
+    const cols = await m.evaluate(() => getComputedStyle(document.querySelector('.choices')).gridTemplateColumns.split(' ').length);
+    check('모바일: 보기가 한 줄에 하나씩', cols === 1);
+    await m.tap('.review [data-index="0"]');
+    await shot(m, '08-mobile-review');
+    await ctxM.close();
+
+    check('콘솔/페이지 오류 없음', errors.length === 0, errors.join(' || '));
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+  const failed = results.filter((r) => !r.ok);
+  console.log(`\n${results.length - failed.length}/${results.length} passed`);
+  process.exit(failed.length ? 1 : 0);
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(2);
+});

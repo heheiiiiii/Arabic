@@ -1,3 +1,6 @@
+import { speech } from '../audio/speech';
+import { learning } from '../learning';
+import { listenButton } from './arabicText';
 import { arabic, el, korean } from './dom';
 import { openModal, closeModal } from './modal';
 import type { DialogueLine, VillagerDef } from '../data/dialogue';
@@ -43,6 +46,7 @@ export class DialogueUI {
 
   next(): void {
     if (!this.root) return;
+    speech.stop();
     if (this.index >= this.lines.length - 1) {
       this.close();
       return;
@@ -53,6 +57,7 @@ export class DialogueUI {
 
   close(): void {
     if (!this.root) return;
+    speech.stop();
     this.root.remove();
     this.root = null;
     document.removeEventListener('keydown', this.onKey);
@@ -83,7 +88,10 @@ export class DialogueUI {
             el('span', { class: 'name-ko' }, '(나)'),
           );
 
-    const body = el('div', { class: 'dialogue__body' }, arabic(line.ar, 'ar ar--line'), korean(line.ko, 'ko ko--line'));
+    const arLine = el('div', { class: 'dialogue__ar' }, arabic(line.ar, 'ar ar--line'), listenButton(line.ar, { small: true }));
+    const body = el('div', { class: 'dialogue__body' }, arLine, korean(line.ko, 'ko ko--line'));
+    const tag = learnedTag(line);
+    if (tag) body.append(tag);
 
     if (line.note) {
       const examples = line.note.examples.map((ex) =>
@@ -109,6 +117,16 @@ export class DialogueUI {
     this.root.replaceChildren(speaker, body, footer);
     nextBtn.focus({ preventScroll: true });
   }
+}
+
+/** 대사에 들어 있는 표현을 책상에서 배웠는지 알려 주는 표시 */
+function learnedTag(line: DialogueLine): HTMLElement | null {
+  const refs = line.refs ?? [];
+  if (refs.length === 0) return null;
+  const progress = learning();
+  const studied = refs.filter((id) => progress.isStudied(id)).length;
+  if (studied === refs.length) return el('p', { class: 'learned-tag learned-tag--done' }, '📘 책상에서 배운 표현이에요');
+  return el('p', { class: 'learned-tag' }, '📗 집 책상에서 배울 수 있는 표현이에요');
 }
 
 export const dialogueUI = new DialogueUI();

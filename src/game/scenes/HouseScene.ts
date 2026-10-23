@@ -4,7 +4,7 @@ import { TileTarget } from '../world/TileTarget';
 import { DESK_RECT, HOUSE_DOOR, HOUSE_MAP, HOUSE_SPAWN } from '../world/maps';
 import { hud } from '../../ui/Hud';
 import { isModalOpen } from '../../ui/modal';
-import { studyUI } from '../../ui/StudyUI';
+import { studyUI } from '../../ui/study/StudyUI';
 import { WorldScene } from './WorldScene';
 
 /** 내 집 내부: 책상에서 공부 메뉴를 열 수 있다. */

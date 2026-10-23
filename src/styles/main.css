@@ -428,7 +428,7 @@ body {
   align-items: center;
   gap: 0.75rem;
   width: 100%;
-  min-height: 56px;
+  min-height: 60px;
   padding: 0.5rem 0.9rem;
   font: inherit;
   text-align: left;
@@ -465,45 +465,6 @@ body {
   color: var(--ink-soft);
 }
 
-.badge {
-  display: inline-block;
-  margin: 0.25rem 0 0.75rem;
-  padding: 0.15rem 0.6rem;
-  background: #fff1c2;
-  border: 1px solid #e0c060;
-  border-radius: 999px;
-  font-size: 0.85rem;
-}
-
-.sample-list {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
-  display: grid;
-  gap: 0.4rem;
-}
-
-.sample-list li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.35rem 0.75rem;
-  background: #fff;
-  border: 1px solid #e6d5bb;
-  border-radius: 8px;
-}
-
-/* 한국어(왼쪽) · 아랍어(오른쪽) 순서로 고정 */
-.sample-list .ko--sample {
-  order: 1;
-}
-
-.sample-list .ar--sample {
-  order: 2;
-  font-size: 1.4rem;
-}
-
 @media (max-width: 480px) {
   .card {
     padding: 1rem;
@@ -518,6 +479,619 @@ body {
   }
 
   .hint {
+    font-size: 0.78rem;
+  }
+}
+
+/* ───────── 아랍어 표시 공통 ───────── */
+/* 모음 부호(위·아래 부호)가 잘리지 않도록 줄 간격과 위아래 여백을 넉넉히 둔다. */
+.ar-inline {
+  font-family: var(--font-ar);
+  font-size: 1.15em;
+  line-height: 1.9;
+  unicode-bidi: isolate;
+}
+
+.mixed {
+  margin: 0;
+  line-height: 1.9;
+}
+
+.ar--hero {
+  font-weight: 700;
+  /* 2.0 미만이면 أَ처럼 위 부호가 높은 글자가 줄 상자를 넘는다 (E2E 글리프 측정으로 확인) */
+  line-height: 2;
+  padding-block: 0;
+  margin: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.ar--hero-word {
+  font-size: clamp(2.6rem, 11vw, 3.6rem);
+}
+
+.ar--hero-sentence {
+  font-size: clamp(1.8rem, 7vw, 2.5rem);
+}
+
+.ar--row {
+  font-size: 1.45rem;
+  line-height: 2;
+}
+
+.ar--bubble {
+  font-size: 1.7rem;
+  line-height: 2;
+}
+
+/* ───────── 듣기 버튼 ───────── */
+.btn-listen {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #eef6ff;
+  white-space: nowrap;
+}
+
+.btn-listen--small {
+  min-height: 40px;
+  min-width: 44px;
+  padding: 0.25rem 0.5rem;
+  justify-content: center;
+}
+
+.btn-listen.is-playing {
+  background: #ffe9a8;
+  border-color: #b7891c;
+  box-shadow: 0 3px 0 #b7891c;
+}
+
+.btn-listen.is-playing .btn-listen__icon {
+  animation: pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  from { opacity: 1; }
+  to { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-listen.is-playing .btn-listen__icon {
+    animation: none;
+  }
+}
+
+/* ───────── 공부 책상 ───────── */
+.study {
+  width: min(640px, 100%);
+}
+
+.study__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.study__header .card__title {
+  margin: 0;
+  flex: 1;
+}
+
+.slow-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.slow-toggle input {
+  width: 18px;
+  height: 18px;
+}
+
+.btn--icon {
+  min-height: 40px;
+  min-width: 40px;
+  padding: 0.2rem 0.5rem;
+}
+
+.btn--ghost {
+  background: transparent;
+  box-shadow: none;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+
+.study__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem 0.55rem;
+  background: #fff;
+  border: 1px solid #e6d5bb;
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.stat__label {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.stat__value {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.stat--due .stat__value {
+  color: #b5541c;
+}
+
+.stat--unit .stat__value {
+  font-size: 0.85rem;
+}
+
+.menu-item__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.menu-item__sub {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.units {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.unit {
+  display: grid;
+  grid-template-columns: 1fr 90px auto;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+}
+
+.unit--current .unit__title {
+  font-weight: 700;
+}
+
+.unit__bar {
+  height: 8px;
+  background: #eadcc4;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.unit__fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.unit__count {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  min-width: 3.2em;
+  text-align: right;
+}
+
+.voice-status {
+  margin: 0.8rem 0 0;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+/* ───────── 학습 화면 ───────── */
+.lesson__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lesson__counter {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.chip {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  border: 1px solid #e0cfae;
+  background: #fff;
+}
+
+.chip-group {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
+.chip--unit { background: var(--accent-soft); border-color: #eebf98; }
+.chip--new { background: #eef6ff; border-color: #b9d4f2; }
+.chip--seen { background: #f3f3f3; }
+.chip--practicing { background: #e9f7e4; border-color: #b8dfa9; }
+.chip--familiar { background: #fff4cc; border-color: #ecd27a; }
+.chip--due { background: #ffe7dc; border-color: #f2b597; }
+
+.new-banner {
+  margin: 0.6rem 0 0;
+  padding: 0.35rem 0.7rem;
+  background: #fff4cc;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.lesson__body {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.3rem 0.5rem 0.7rem;
+  background: #fff;
+  border: 2px solid #e6d5bb;
+  border-radius: 10px;
+}
+
+.hero .ar--hero {
+  width: 100%;
+}
+
+.ko--meaning {
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.reading {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.reading dt {
+  color: var(--ink-soft);
+}
+
+.reading dd {
+  margin: 0;
+}
+
+.translit {
+  font-style: italic;
+}
+
+.notes {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem 0.75rem;
+  background: var(--note);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.note-line {
+  margin: 0;
+}
+
+.related__title {
+  margin: 0.4rem 0 0.3rem;
+  font-size: 0.95rem;
+}
+
+.related__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.related__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0.6rem;
+  background: #fff;
+  border: 1px solid #e6d5bb;
+  border-radius: 8px;
+}
+
+.related__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.related__text--word {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.related__text--word .ko--row {
+  order: -1;
+}
+
+.ko--row {
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.lesson__nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+/* 학습·복습 화면에서는 이전/다음 버튼을 카드 아래쪽에 고정해 스크롤 없이 누를 수 있게 한다. */
+.lesson > .lesson__nav,
+.review:not(.review--empty):not(.review--summary) > .lesson__nav {
+  position: sticky;
+  bottom: -1.25rem;
+  margin: 1rem -1.25rem -1.25rem;
+  padding: 0.65rem 1.25rem 0.9rem;
+  background: var(--panel);
+  border-top: 1px solid #e6d5bb;
+  z-index: 1;
+}
+
+/* ───────── 복습 ───────── */
+.prompt {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.7rem 0;
+}
+
+.prompt__ask {
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.prompt__ko,
+.prompt__situation {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.speech-bubble {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.3rem 0.9rem;
+  background: #fff;
+  border: 2px solid #e6d5bb;
+  border-radius: 14px 14px 14px 4px;
+}
+
+.speech-bubble .ar {
+  flex: 1;
+}
+
+.choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 56px;
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  text-align: left;
+  background: #fff;
+  color: var(--ink);
+  border: 2px solid var(--panel-edge);
+  border-radius: 8px;
+  box-shadow: 0 3px 0 var(--panel-edge);
+  cursor: pointer;
+}
+
+.choice:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.choice:disabled {
+  cursor: default;
+}
+
+.choice__num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #eadcc4;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.choice__text {
+  flex: 1;
+}
+
+.choice__text.ar {
+  font-size: 1.45rem;
+  line-height: 2;
+}
+
+.choice.is-correct {
+  background: #e3f6dc;
+  border-color: #4c9a2a;
+  box-shadow: 0 3px 0 #4c9a2a;
+}
+
+.choice.is-wrong {
+  background: #fde4dd;
+  border-color: #c0492b;
+  box-shadow: 0 3px 0 #c0492b;
+}
+
+.feedback:empty {
+  display: none;
+}
+
+.feedback {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+  padding: 0.7rem 0.8rem;
+  background: var(--note);
+  border-radius: 8px;
+}
+
+.feedback__title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.feedback__title.is-correct { color: #3b7d1f; }
+.feedback__title.is-wrong { color: #a23d22; }
+
+.feedback__answer {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.feedback__explain {
+  font-size: 0.9rem;
+}
+
+.review--empty,
+.review--summary {
+  text-align: center;
+}
+
+.review--empty .lesson__nav,
+.review--summary .lesson__nav {
+  justify-content: center;
+}
+
+.empty-icon {
+  font-size: 2.5rem;
+  margin: 0.5rem 0 0;
+}
+
+.empty-title {
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.review--empty .ko,
+.review--summary .ko--row {
+  text-align: center;
+}
+
+.summary__score {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0.5rem 0 0.2rem;
+}
+
+.summary__msg {
+  text-align: center;
+  margin-bottom: 0.8rem;
+}
+
+.review--summary .related__list {
+  text-align: left;
+}
+
+/* ───────── 대화창 추가 요소 ───────── */
+.dialogue__ar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.dialogue__ar .ar--line {
+  flex: 1;
+}
+
+.learned-tag {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.learned-tag--done {
+  color: #3b7d1f;
+}
+
+/* 작은 화면: 학습 화면은 한 줄에 하나씩 */
+@media (max-width: 520px) {
+  .study {
+    padding: 0.85rem;
+  }
+
+  .study__stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .choices--ko,
+  .choices--ar {
+    grid-template-columns: 1fr;
+  }
+
+  .lesson__nav .btn {
+    flex: 1 1 auto;
+  }
+
+  .lesson > .lesson__nav,
+  .review:not(.review--empty):not(.review--summary) > .lesson__nav {
+    bottom: -0.85rem;
+    margin: 0.8rem -0.85rem -0.85rem;
+    padding: 0.6rem 0.85rem 0.75rem;
+  }
+
+  .unit {
+    grid-template-columns: 1fr 60px auto;
+  }
+
+  .slow-toggle {
     font-size: 0.78rem;
   }
 }

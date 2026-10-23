@@ -7,14 +7,18 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:e2e": "node tests/e2e/run.mjs"
   },
   "dependencies": {
     "@fontsource/noto-naskh-arabic": "^5.3.0",
     "phaser": "^3.90.0"
   },
   "devDependencies": {
+    "playwright": "^1.63.0",
     "typescript": "~5.9.3",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "vitest": "^3.2.7"
   }
 }
