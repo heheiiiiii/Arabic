@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Arabic Village</title>
+  </head>
+  <body>
+    <div id="game-root"></div>
+
+    <!-- HTML UI 레이어: 아랍어/한국어 텍스트는 모두 여기서 그린다 (Phaser 캔버스가 아님) -->
+    <div id="ui-root">
+      <div id="hud" class="hud" hidden>
+        <div class="hud__card">
+          <span class="hud__name"><bdi id="hud-name"></bdi></span>
+          <span class="hud__place" id="hud-place"></span>
+        </div>
+        <button type="button" id="hud-exit" class="btn btn--small" hidden>마을로 나가기</button>
+      </div>
+      <p id="hint" class="hint" hidden></p>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
