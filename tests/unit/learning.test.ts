@@ -179,7 +179,7 @@ describe('복습 문제', () => {
 describe('저장 데이터 버전 관리', () => {
   it('1단계 저장 데이터(이름만)를 현재 형식으로 옮긴다', () => {
     const r = parseSave({ playerName: '  민지  ' })!;
-    expect(r.data).toEqual({ version: SAVE_VERSION, playerName: '민지', learning: emptyLearningRecord(), npcs: {}, settings: defaultSettings() });
+    expect(r.data).toEqual({ version: SAVE_VERSION, playerName: '민지', player: { gender: null, appearance: { hairStyle: 'short', eyes: 'dot' } }, learning: emptyLearningRecord(), npcs: {}, settings: defaultSettings() });
     expect(r.fromFuture).toBe(false);
   });
 
@@ -201,9 +201,9 @@ describe('저장 데이터 버전 관리', () => {
     expect(r.data.learning.position).toEqual({ word: 3, sentence: 0 });
   });
 
-  it('2단계 저장 데이터(학습 기록 포함)를 3단계로 옮기며 진도를 유지한다', () => {
+  it('2단계 저장 데이터(학습 기록 포함)를 최신 형식으로 옮기며 진도를 유지한다', () => {
     const r = parseSave({ version: 2, playerName: 'A', learning: { items: { 'w.bayt': { firstStudiedAt: 5, box: 2, dueAt: 9, correct: 1 } }, position: { word: 2, sentence: 1 } } })!;
-    expect(r.data.version).toBe(3);
+    expect(r.data.version).toBe(SAVE_VERSION);
     expect(r.data.learning.items['w.bayt'].box).toBe(2);
     expect(r.data.learning.heard).toEqual({});
     expect(r.data.learning.saved).toEqual([]);
@@ -222,7 +222,22 @@ describe('저장 데이터 버전 관리', () => {
     expect(r.data.npcs.layla.facts).toHaveLength(1);
     expect(r.data.npcs.layla.recent).toHaveLength(1);
     expect(r.data.npcs.layla.friendship).toBe(7);
-    expect(r.data.settings).toMatchObject({ ttsEngine: 'audio', slow: true, addressGender: 'f', sttEngine: 'auto', sttConsent: false });
+    expect(r.data.settings).toEqual({ ttsEngine: 'audio', slow: true, autoplay: true, sttEngine: 'auto', sttConsent: false });
+    // 3단계까지는 성별이 대화 설정에 있었다 → 플레이어 정보로 옮긴다
+    expect(r.data.player).toEqual({ gender: 'f', appearance: { hairStyle: 'short', eyes: 'dot' } });
+  });
+
+  it('3단계에서 성별을 지정하지 않았으면 첫 화면에서 다시 고르게 한다', () => {
+    const r = parseSave({ version: 3, playerName: 'A', settings: { addressGender: 'unspecified' } })!;
+    expect(r.data.player.gender).toBeNull();
+    expect(parseSave({ playerName: 'A' })!.data.player.gender).toBeNull();
+  });
+
+  it('플레이어 성별·외형을 검증하며 복원한다', () => {
+    const ok = parseSave({ version: 4, playerName: 'A', player: { gender: 'm', appearance: { hairStyle: 'curly', eyes: 'lashes' } } })!;
+    expect(ok.data.player).toEqual({ gender: 'm', appearance: { hairStyle: 'curly', eyes: 'lashes' } });
+    const bad = parseSave({ version: 4, playerName: 'A', player: { gender: 'x', appearance: { hairStyle: 'mohawk' } } })!;
+    expect(bad.data.player).toEqual({ gender: null, appearance: { hairStyle: 'short', eyes: 'dot' } });
   });
 
   it('미래 버전 데이터는 읽되 덮어쓰지 않도록 표시한다', () => {

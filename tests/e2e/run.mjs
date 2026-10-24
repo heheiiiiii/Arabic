@@ -73,9 +73,15 @@ async function moveTo(page, wx, wy) {
   await page.evaluate(([x, y]) => __t.scene().walkTo({ x, y }), [wx, wy]);
   await waitStill(page);
 }
+/** 성별을 아직 고르지 않았으면 고른다 (첫 화면에서 반드시 골라야 한다) */
+async function pickGender(page, gender = 'm', tap = false) {
+  if (await page.isChecked('#gender-m') || await page.isChecked('#gender-f')) return;
+  if (tap) await page.tap(`label[for=gender-${gender}]`); else await page.click(`label[for=gender-${gender}]`);
+}
 async function startGame(page, name = '') {
   await page.waitForSelector('#player-name');
   if (name) await page.fill('#player-name', name);
+  await pickGender(page);
   await page.click('button[type=submit]');
   await page.waitForFunction(() => window.__arabicVillage?.game.scene.isActive('village'));
   await inject(page);
@@ -355,7 +361,7 @@ async function main() {
     await startGame(page);
     await openStudy(page);
     const stats2 = await statValues(page);
-    check('새로고침 후 학습 진도 복원', saved.version === 3 && Object.keys(saved.learning.items).length === 10 && stats2[0] === '6 / 49' && stats2[1] === '4 / 43', stats2.join(' | '));
+    check('새로고침 후 학습 진도 복원', saved.version === 4 && Object.keys(saved.learning.items).length === 10 && stats2[0] === '6 / 49' && stats2[1] === '4 / 43', stats2.join(' | '));
     await page.click('[data-topic=words]');
     check('이어서 배우기: 아직 안 배운 첫 단어부터', (await page.getAttribute('.ar--hero', 'data-item-id')) === 'w.nur');
     await page.keyboard.press('Escape');
@@ -372,7 +378,7 @@ async function main() {
     const oldName = await pOld.inputValue('#player-name');
     await startGame(pOld);
     const migrated = await pOld.evaluate(() => JSON.parse(localStorage.getItem('arabic-village:v1')));
-    check('1단계 저장 데이터(이름만) → 현재 버전(3)으로 이전', oldName === '옛 이름' && migrated.version === 3 && migrated.playerName === '옛 이름' && typeof migrated.learning === 'object', JSON.stringify(migrated).slice(0, 80));
+    check('1단계 저장 데이터(이름만) → 현재 버전(4)으로 이전', oldName === '옛 이름' && migrated.version === 4 && migrated.playerName === '옛 이름' && typeof migrated.learning === 'object', JSON.stringify(migrated).slice(0, 80));
     await ctxOld.close();
 
     // ═════ 5. 음성 재생 상태 (가짜 아랍어 음성 주입) ═════
@@ -408,6 +414,58 @@ async function main() {
     check('공부 메뉴를 닫으면 음성 정지', (await sp.evaluate(() => window.__speechLog.at(-1))) === 'cancel');
     await ctxSp.close();
 
+    // ═════ 5-1. 성별·외형 선택 ═════
+    const ctxG = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const gp = await ctxG.newPage();
+    watch(gp, 'gender');
+    await gp.goto(URL);
+    await gp.waitForSelector('#player-name');
+    check('성별 선택지는 남/여 두 가지', (await gp.$$eval('input[name=gender]', (els) => els.map((e) => e.value))).join(',') === 'm,f');
+    await gp.click('button[type=submit]');
+    await sleep(200);
+    check('성별을 고르지 않으면 출발할 수 없음', !!(await gp.$('#player-name')) && (await gp.isVisible('.start__error')));
+    const previewOf = () => gp.evaluate(() => document.querySelector('.start__preview').toDataURL());
+    const pv0 = await previewOf();
+    await gp.click('label[for=hair-long]');
+    const pv1 = await previewOf();
+    await gp.click('label[for=eyes-big]');
+    const pv2 = await previewOf();
+    check('머리·눈 모양을 바꾸면 미리보기가 바뀜', pv0 !== pv1 && pv1 !== pv2);
+    await gp.click('label[for=gender-f]');
+    check('성별을 고르면 나를 부르는 형태 안내', (await gp.textContent('.start__form')).includes('كَيْفَ حَالُكِ؟') && !(await gp.isVisible('.start__error')));
+    await shot(gp, '07-start-gender');
+    await gp.click('button[type=submit]');
+    await gp.waitForFunction(() => window.__arabicVillage?.game.scene.isActive('village'));
+    await inject(gp);
+    await sleep(500);
+    const gSaved = await gp.evaluate(() => JSON.parse(localStorage.getItem('arabic-village:v1')).player);
+    check('성별·외형 저장', JSON.stringify(gSaved) === JSON.stringify({ gender: 'f', appearance: { hairStyle: 'long', eyes: 'big' } }), JSON.stringify(gSaved));
+    // 긴 머리는 얼굴 옆(도트 3,6)까지 내려온다 → 마을 캐릭터 텍스처에 머리색이 찍혀 있어야 한다
+    const hairPx = await gp.evaluate(() => {
+      const c = window.__arabicVillage.game.textures.getPixel(7, 13, 'player-down-0');
+      return c ? [c.red, c.green, c.blue, c.alpha] : null;
+    });
+    check('고른 머리 모양이 마을 캐릭터에 반영', !!hairPx && hairPx[0] === 0x3b && hairPx[1] === 0x2a && hairPx[2] === 0x20 && hairPx[3] === 255, JSON.stringify(hairPx));
+    await moveTo(gp, C(15), C(13));
+    await clickWorld(gp, C(17), C(11) - 4);
+    await gp.waitForSelector('.convo .entry--npc', { timeout: 20000 });
+    await gp.fill('.convo__input', 'مرحبا');
+    await gp.click('[data-role=send]');
+    await gp.waitForFunction(() => document.querySelectorAll('.convo .entry--npc').length >= 2, null, { timeout: 20000 });
+    const fLine = await gp.evaluate(() => [...document.querySelectorAll('.convo .entry--npc .ar--chat')].map((e) => e.textContent).join(' '));
+    check('여성 플레이어 → 라일라가 여성형으로 안부 (حَالُكِ)', fLine.includes('كَيْفَ حَالُكِ؟') && !fLine.includes('حَالُكَ'), fLine);
+    await gp.click('.convo button[aria-label="대화 설정"]');
+    await shot(gp, '08-convo-female');
+    await gp.selectOption('.convo .setting:has-text("내 성별") select', 'm');
+    const gAfter = await gp.evaluate(() => JSON.parse(localStorage.getItem('arabic-village:v1')).player.gender);
+    check('대화 설정에서 성별을 바꾸면 같은 값이 바뀜', gAfter === 'm', gAfter);
+    await gp.selectOption('.convo .setting:has-text("내 성별") select', 'f');
+    await gp.click('.convo [data-role=close]');
+    await gp.reload();
+    await gp.waitForSelector('#player-name');
+    check('다시 시작할 때 고른 성별·외형 유지', (await gp.isChecked('#gender-f')) && (await gp.isChecked('#hair-long')) && (await gp.isChecked('#eyes-big')));
+    await ctxG.close();
+
     // ═════ 6. 모바일 (터치) ═════
     const ctxM = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
     const m = await ctxM.newPage();
@@ -415,6 +473,7 @@ async function main() {
     await m.goto(URL);
     await m.waitForSelector('#player-name');
     await m.fill('#player-name', '민지');
+    await pickGender(m, 'f', true);
     await m.tap('button[type=submit]');
     await m.waitForFunction(() => window.__arabicVillage?.game.scene.isActive('village'));
     await inject(m);

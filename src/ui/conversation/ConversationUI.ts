@@ -3,7 +3,7 @@ import { browserSttSupported, recorderSupported, STT_MESSAGES, VoiceInput, type 
 import { getHealth, type ServerHealth } from '../../conversation/client';
 import { forgetFact, friendshipLevel } from '../../conversation/memory';
 import { ConversationSession, type Entry } from '../../conversation/session';
-import { getNpcRecord, getSettings, persist, resetNpcRecord, updateSettings } from '../../game/state';
+import { getNpcRecord, getPlayerGender, getSettings, persist, resetNpcRecord, setPlayerGender, updateSettings } from '../../game/state';
 import { learning } from '../../learning';
 import { getItem } from '../../learning/content';
 import type { ArabicLine, MemoryFact, NpcReply } from '../../shared/conversation';
@@ -537,7 +537,7 @@ export class ConversationUI {
     const h = this.health;
     this.settingsPanel.replaceChildren(
       el('h3', { class: 'related__title' }, '대화 설정'),
-      select('라일라가 나를 부를 때', s.addressGender, [['unspecified', '성별 지정 안 함'], ['m', '남성형 (أَنْتَ)'], ['f', '여성형 (أَنْتِ)']], (v) => updateSettings({ addressGender: v })),
+      select('내 성별 (라일라가 나를 부르는 말)', getPlayerGender(), [['m', '남성 (أَنْتَ · حَالُكَ)'], ['f', '여성 (أَنْتِ · حَالُكِ)']], (v) => setPlayerGender(v)),
       check('주민 대사 자동으로 듣기', s.autoplay, (v) => updateSettings({ autoplay: v })),
       check('🐢 천천히 듣기', s.slow, (v) => updateSettings({ slow: v })),
       select('음성 출력', s.ttsEngine, [['auto', '자동 (브라우저 → 음성 파일)'], ['browser', '브라우저 음성만'], ['audio', '음성 파일·서버 음성만']], (v) => updateSettings({ ttsEngine: v })),

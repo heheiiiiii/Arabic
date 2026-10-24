@@ -11,7 +11,7 @@ import { LAYLA } from '../src/data/dialogue';
 import { practiceReply } from '../src/shared/practiceNpc';
 import { prebuiltAudioPath } from '../src/shared/hash';
 import { splitSentences } from '../src/shared/sentences';
-import type { AddressGender, ChatRequest, NpcReply } from '../src/shared/conversation';
+import type { ChatRequest, Gender, NpcReply } from '../src/shared/conversation';
 import { espeakProvider } from '../server/tts/espeak';
 import { sanitizeTtsText } from '../server/tts';
 
@@ -29,13 +29,13 @@ async function main() {
   const texts = new Set<string>();
   const add = (t: string) => t.trim() && texts.add(t.trim());
   for (const it of ALL_ITEMS) add(it.tts ?? it.ar);
-  for (const l of LAYLA.greeting) {
+  for (const l of [...LAYLA.greeting('m'), ...LAYLA.greeting('f')]) {
     add(l.ar);
     splitSentences(l.ar).forEach(add);
   }
   // 연습 상대가 낼 수 있는 문장 (여러 입력·성별·진행 단계로 실행해 모은다)
   const inputs = [null, 'مرحبا', 'السلام عليكم', 'صباح الخير', 'مساء الخير', 'كيف الحال', 'انا بخير', 'اسمي سارة', 'انا من كوريا', 'احب الشاي', 'شكرا', 'نعم', 'لا', 'مع السلامة', 'abc', 'كلام غريب'];
-  for (const g of ['m', 'f', 'unspecified'] as AddressGender[]) {
+  for (const g of ['m', 'f'] as Gender[]) {
     for (let asked = 0; asked <= 6; asked++) {
       for (const playerText of inputs) {
         const history: ChatRequest['history'] = [];

@@ -11,7 +11,7 @@ const baseReq = (over: Partial<ChatRequest> = {}): ChatRequest => ({
   history: [],
   memory: { facts: [], topics: [], conversations: 0 },
   learner: { level: 1, unitTitleKo: '', comfortable: [], needsReview: [], seenOnly: [], studiedCount: 0 },
-  addressGender: 'unspecified',
+  addressGender: 'm',
   ...over,
 });
 
@@ -45,7 +45,7 @@ describe('연습 상대 (모의 NPC)', () => {
   it('부호 없는 입력(음성 인식 결과 등)을 알아듣고 다음 주제를 묻는다', () => {
     const r = practiceReply(baseReq({ playerText: 'مرحبا' }));
     expect(r.understood).toBe(true);
-    expect(r.reply.ar).toContain('كَيْفَ الْحَالُ؟');
+    expect(r.reply.ar).toContain('كَيْفَ حَالُكَ؟');
     const r2 = practiceReply(baseReq({ playerText: 'السلام عليكم' }));
     expect(r2.reply.ar).toContain('وَعَلَيْكُمُ السَّلَامُ');
   });
@@ -55,14 +55,32 @@ describe('연습 상대 (모의 NPC)', () => {
     expect(r.memoryCandidates).toEqual([{ kind: 'name', value: 'سارة', evidence: 'اسمي سارة' }]);
   });
 
-  it('호칭 성별 설정에 맞는 형태로 묻는다', () => {
-    const asked = [{ role: 'npc' as const, text: 'كَيْفَ الْحَالُ؟' }];
+  it('플레이어 성별에 맞는 형태로 묻는다', () => {
+    const first = (g: 'm' | 'f') => practiceReply(baseReq({ playerText: 'مرحبا', addressGender: g }));
+    expect(first('m').reply.ar).toContain('كَيْفَ حَالُكَ؟');
+    expect(first('f').reply.ar).toContain('كَيْفَ حَالُكِ؟');
+    const asked = [{ role: 'npc' as const, text: 'كَيْفَ حَالُكَ؟' }];
     const m = practiceReply(baseReq({ playerText: 'انا بخير', history: asked, addressGender: 'm' }));
     const f = practiceReply(baseReq({ playerText: 'انا بخير', history: asked, addressGender: 'f' }));
-    const n = practiceReply(baseReq({ playerText: 'انا بخير', history: asked }));
     expect(m.reply.ar).toContain('مَا اسْمُكَ؟');
     expect(f.reply.ar).toContain('مَا اسْمُكِ؟');
-    expect(n.reply.ar).not.toMatch(/اسْمُكَ|اسْمُكِ/);
+  });
+
+  it('플레이어가 자기를 말하는 예시도 성별에 맞춘다', () => {
+    const history = [{ role: 'npc' as const, text: 'كَيْفَ حَالُكَ؟' }, { role: 'player' as const, text: 'اسمي سارة' }, { role: 'npc' as const, text: 'اِسْمِي لَيْلَى. مَا اسْمُكَ؟' }];
+    const m = practiceReply(baseReq({ playerText: 'اسمي سامي', history, addressGender: 'm' }));
+    const f = practiceReply(baseReq({ playerText: 'اسمي سارة', history, addressGender: 'f' }));
+    expect(m.reply.ar).toContain('مِنْ أَيْنَ أَنْتَ؟');
+    expect(m.hint.alternatives).toContain('أَنَا كُورِيٌّ.');
+    expect(f.reply.ar).toContain('مِنْ أَيْنَ أَنْتِ؟');
+    expect(f.hint.alternatives).toContain('أَنَا كُورِيَّةٌ.');
+  });
+
+  it('대화 중에 성별을 바꿔도 이미 물은 주제를 다시 묻지 않는다', () => {
+    const history = [{ role: 'npc' as const, text: 'مَرْحَبًا! كَيْفَ حَالُكَ؟' }];
+    const r = practiceReply(baseReq({ playerText: 'انا بخير', history, addressGender: 'f' }));
+    expect(r.reply.ar).not.toContain('حَالُكِ');
+    expect(r.reply.ar).toContain('مَا اسْمُكِ؟');
   });
 
   it('알아듣지 못하면 벌점 없이 되묻고 힌트를 준다 (한국어 입력 포함)', () => {
@@ -76,7 +94,7 @@ describe('연습 상대 (모의 NPC)', () => {
   it('연습 상대가 말하는 모든 아랍어 문장이 모음 부호 형식 검사를 통과한다', () => {
     const inputs = [null, 'مرحبا', 'السلام عليكم', 'صباح الخير', 'مساء الخير', 'كيف الحال', 'انا بخير', 'اسمي سارة', 'انا من كوريا', 'احب الشاي', 'شكرا', 'نعم', 'مع السلامة', 'xyz'];
     const problems: string[] = [];
-    for (const g of ['m', 'f', 'unspecified'] as const) {
+    for (const g of ['m', 'f'] as const) {
       const history: ChatRequest['history'] = [];
       for (let step = 0; step < 6; step++) {
         for (const t of inputs) {
@@ -113,6 +131,8 @@ describe('응답·요청 검증', () => {
     expect(typeof validateChatRequest({ ...baseReq(), npcId: '../etc' })).toBe('string');
     expect(typeof validateChatRequest({ ...baseReq(), playerText: '   ' })).toBe('string');
     expect(typeof validateChatRequest({ npcId: 'layla' })).toBe('string');
+    expect(typeof validateChatRequest({ ...baseReq(), addressGender: 'unspecified' })).toBe('string');
+    expect(validateChatRequest({ ...baseReq(), addressGender: 'f' })).toMatchObject({ addressGender: 'f' });
     expect(validateChatRequest(baseReq({ playerText: 'مرحبا' }))).toMatchObject({ playerText: 'مرحبا' });
   });
 });

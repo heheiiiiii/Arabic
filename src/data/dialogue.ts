@@ -1,9 +1,11 @@
 /**
  * 미리 작성한 대화 데이터 (현대 표준 아랍어, MSA).
  *
- * 플레이어의 성별을 아직 고르지 않으므로, 주민이 플레이어에게 하는 말은
- * 성별 구분이 필요 없는 표현(كَيْفَ الْحَالُ؟ 등)만 쓰고, 성별에 따른 차이는 note로 알려 준다.
+ * 주민이 플레이어에게 하는 말은 플레이어가 첫 화면에서 고른 성별에 맞춘다 (كَيْفَ حَالُكَ؟ / كَيْفَ حَالُكِ؟).
+ * 다른 성별에게 쓰는 형태는 note로 함께 알려 준다.
  */
+
+import type { Gender } from '../shared/conversation';
 
 export type Speaker = 'villager' | 'player';
 
@@ -28,27 +30,28 @@ export interface VillagerDef {
   id: string;
   nameAr: string;
   nameKo: string;
-  greeting: DialogueLine[];
+  /** 첫 인사 대사 (플레이어 성별에 따라 달라진다) */
+  greeting(g: Gender): DialogueLine[];
 }
 
 export const LAYLA: VillagerDef = {
   id: 'layla',
   nameAr: 'لَيْلَى',
   nameKo: '라일라',
-  greeting: [
+  greeting: (g) => [
     { speaker: 'villager', ar: 'مَرْحَبًا!', ko: '안녕!', refs: ['s.marhaban'] },
     { speaker: 'villager', ar: 'أَنَا لَيْلَى.', ko: '나는 라일라야.', refs: ['w.ana'] },
     { speaker: 'villager', ar: 'أَهْلًا وَسَهْلًا فِي قَرْيَتِنَا!', ko: '우리 마을에 온 걸 환영해!', refs: ['s.ahlan_qarya'] },
     {
       speaker: 'villager',
-      ar: 'كَيْفَ الْحَالُ؟',
+      ar: g === 'm' ? 'كَيْفَ حَالُكَ؟' : 'كَيْفَ حَالُكِ؟',
       ko: '요즘 어때?',
-      refs: ['s.kayfa_hal'],
+      refs: [g === 'm' ? 's.kayfa_haluka' : 's.kayfa_haluki'],
       note: {
-        text: '상대를 직접 가리켜 "너는 어떻게 지내?"라고 물을 때는 상대의 성별에 따라 끝소리가 달라져요.',
+        text: '상대를 직접 가리켜 "너는 어떻게 지내?"라고 물을 때는 상대의 성별에 따라 끝소리가 달라져요. 성별과 상관없이 كَيْفَ الْحَالُ؟라고 물을 수도 있어요.',
         examples: [
-          { label: '남성에게', ar: 'كَيْفَ حَالُكَ؟' },
-          { label: '여성에게', ar: 'كَيْفَ حَالُكِ؟' },
+          { label: g === 'm' ? '남성에게 (나)' : '남성에게', ar: 'كَيْفَ حَالُكَ؟' },
+          { label: g === 'f' ? '여성에게 (나)' : '여성에게', ar: 'كَيْفَ حَالُكِ؟' },
         ],
       },
     },
