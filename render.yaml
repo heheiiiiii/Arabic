@@ -1,0 +1,25 @@
+# Render 블루프린트: Dashboard → New → Blueprint 에서 이 저장소를 고르면 아래 서비스가 만들어진다.
+# 자세한 순서는 docs/DEPLOY.md 참고.
+services:
+  - type: web
+    name: arabic-village
+    runtime: docker
+    plan: starter            # 무료 요금제는 15분 쉬면 잠들고 디스크를 붙일 수 없다
+    region: singapore        # 한국에서 가장 가까운 지역
+    branch: main
+    autoDeploy: true         # main에 병합되면 자동 배포
+    healthCheckPath: /api/health
+    disk:
+      name: data
+      mountPath: /data       # 서버 음성(TTS) 캐시. 재배포해도 남는다
+      sizeGB: 1
+    envVars:
+      # 비밀 값은 sync: false → 처음 만들 때 대시보드에서 직접 입력한다 (저장소에 넣지 않음)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ACCESS_CODE
+        sync: false
+      - key: AI_DAILY_LIMIT
+        value: "300"
+      - key: TTS_PROVIDERS
+        value: espeak

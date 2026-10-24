@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # 타입 검사·단위 테스트·프로덕션 빌드 (빠름)
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  # 브라우저 E2E (Playwright Chromium + espeak-ng·ffmpeg). 몇 분 걸린다.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install espeak-ng and ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq espeak-ng ffmpeg
+      - run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+  # 운영 Docker 이미지: 빌드 후 실행해 게임 페이지·/api/health·서버 음성(espeak-ng)을 확인한다
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t arabic-village .
+      - name: Smoke test
+        run: |
+          docker run -d --name av -p 8787:8787 arabic-village
+          for i in $(seq 1 30); do curl -fsS localhost:8787/api/health && break; sleep 1; done
+          echo
+          curl -fsS localhost:8787/api/health | grep -q '"espeak-ng"'
+          curl -fsS localhost:8787/ | grep -qi '<html'
+          curl -fsS -G -o /tmp/tts.mp3 -w '%{http_code} %{content_type}\n' localhost:8787/api/tts --data-urlencode 'text=مَرْحَبًا'
+          test "$(stat -c %s /tmp/tts.mp3)" -gt 1000
+      - if: failure()
+        run: docker logs av

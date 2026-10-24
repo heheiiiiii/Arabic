@@ -394,8 +394,9 @@ try {
   await enterAndTalk(b, B.url);
   const bBadge = await b.evaluate(() => ({ mode: document.querySelector('.mode-badge').dataset.mode, tag: document.querySelector('.src-tag')?.textContent }));
   check('B. [모의 AI] AI 모드 배지와 응답 출처 표시', bBadge.mode === 'ai' && bBadge.tag.includes('claude-opus-5-5'), JSON.stringify(bBadge));
-  const sentReq = aiLog.at(-1);
-  check('B. AI 요청에 시험 단계·기억·구조화 출력 포함 (키는 서버에만)', sentReq.output_config?.format?.type === 'json_schema' && sentReq.system?.[2]?.text.includes('Exam stage'), sentReq.model);
+  // 대화 요청(시스템 블록 3개)만 본다. 그 뒤에 단계 어휘 다시 쓰기·하라카트 교정 요청이 이어질 수 있다.
+  const sentReq = aiLog.findLast((r) => r.system?.length === 3);
+  check('B. AI 요청에 시험 단계·기억·구조화 출력 포함 (키는 서버에만)', sentReq?.output_config?.format?.type === 'json_schema' && sentReq?.system?.[2]?.text.includes('Exam stage'), sentReq?.model);
   const bAudio = await waitAudio(b, (a) => a.some((x) => x.ended), 20000);
   check('[실제 재생] 미리 만들지 않은 AI 문장 → 서버 espeak-ng 음성 생성 후 재생', bTts.some((r) => r.status === 200 && r.type === 'audio/mpeg' && r.provider === 'espeak-ng') && bAudio.some((x) => x.ended && x.maxTime > 0.5), JSON.stringify(bTts.slice(0, 2)));
   const bundle = await b.evaluate(async () => {
