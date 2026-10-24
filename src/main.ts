@@ -4,7 +4,7 @@ import './styles/main.css';
 
 import { submitAccessCode } from './conversation/client';
 import { createGame } from './game/createGame';
-import { getPlayerName, getPlayerProfile, loadSave, setPlayerName, setPlayerProfile } from './game/state';
+import { getPlayerName, getPlayerProfile, loadSave, recordExamResult, setPlayerName, setPlayerProfile } from './game/state';
 import { getLearnerProfile, learning } from './learning';
 import { hud } from './ui/Hud';
 import { byId } from './ui/dom';
@@ -32,7 +32,7 @@ async function start(): Promise<void> {
 
   // 개발 모드에서만: 브라우저 자동화 테스트가 게임 상태를 읽을 수 있게 노출한다.
   if (import.meta.env.DEV) {
-    (window as unknown as { __arabicVillage: unknown }).__arabicVillage = { game, learning, getLearnerProfile };
+    (window as unknown as { __arabicVillage: unknown }).__arabicVillage = { game, learning, getLearnerProfile, recordExamResult };
   }
 }
 

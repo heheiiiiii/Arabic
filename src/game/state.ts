@@ -3,18 +3,20 @@ import { emptyNpcMemory, sanitizeNpcMemory, type NpcMemoryRecord } from '../conv
 import { defaultSettings, sanitizeSettings, type Settings } from './settings';
 import { DEFAULT_APPEARANCE, EYE_STYLES, HAIR_STYLES, type Appearance } from './art/person';
 import { isGender, type Gender } from '../shared/conversation';
+import { clampStage, type ExamStage } from '../learning/stage';
 
 /**
  * 브라우저 로컬 저장.
  * - version 1 (1단계): { playerName }  ← version 필드 없음
  * - version 2 (2단계): { version, playerName, learning }
  * - version 3 (3단계): { version, playerName, learning, npcs, settings }  ← settings.addressGender: 'm' | 'f' | 'unspecified'
- * - version 4 (현재):  { version, playerName, player, learning, npcs, settings }
+ * - version 4 (4단계): { version, playerName, player, learning, npcs, settings }
+ * - version 5 (현재):  { version, playerName, player, exam, learning, npcs, settings }  ← exam: 아랍어 시험 단계
  * 키 이름은 1단계와 같게 유지해 기존 데이터가 사라지지 않게 한다.
  * 학습 진도(learning)와 주민 관계·기억(npcs)은 서로 다른 필드로 분리한다.
  */
 const STORAGE_KEY = 'arabic-village:v1';
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const DEFAULT_PLAYER_NAME = '유학생';
 export const MAX_NAME_LENGTH = 12;
 
@@ -24,10 +26,22 @@ export interface PlayerProfile {
   appearance: Appearance;
 }
 
+/**
+ * 아랍어 시험 기록. 모든 주민의 대화 수준은 stage를 따른다.
+ * 시험에 합격했을 때 게임 로직만 올린다 (AI 응답이나 대화 결과로는 바뀌지 않는다).
+ */
+export interface ExamRecord {
+  stage: ExamStage;
+  /** 마지막으로 합격한 시각 (아직 응시 전이면 null) */
+  passedAt: number | null;
+  attempts: number;
+}
+
 export interface SaveData {
   version: typeof SAVE_VERSION;
   playerName: string;
   player: PlayerProfile;
+  exam: ExamRecord;
   learning: LearningRecord;
   npcs: Record<string, NpcMemoryRecord>;
   settings: Settings;
@@ -37,6 +51,7 @@ const fresh = (): SaveData => ({
   version: SAVE_VERSION,
   playerName: DEFAULT_PLAYER_NAME,
   player: { gender: null, appearance: { ...DEFAULT_APPEARANCE } },
+  exam: emptyExamRecord(),
   learning: emptyLearningRecord(),
   npcs: {},
   settings: defaultSettings(),
@@ -66,12 +81,27 @@ export function parseSave(raw: unknown): { data: SaveData; fromFuture: boolean }
     playerName: normalizeName(r.playerName),
     // v3까지는 성별이 대화 설정에 있었다. '지정 안 함'이었으면 첫 화면에서 다시 고른다.
     player: version >= 4 ? sanitizeProfile(r.player) : { gender: legacyGender(r.settings), appearance: { ...DEFAULT_APPEARANCE } },
+    // v4까지는 시험 기록이 없다 → 1단계(응시 전)
+    exam: version >= 5 ? sanitizeExam(r.exam) : emptyExamRecord(),
     // v1에는 학습 기록이 없다 → 빈 기록으로 시작
     learning: version >= 2 ? sanitizeLearningRecord(r.learning) : emptyLearningRecord(),
     npcs,
     settings: version >= 3 ? sanitizeSettings(r.settings) : defaultSettings(),
   };
   return { data, fromFuture: version > SAVE_VERSION };
+}
+
+export function emptyExamRecord(): ExamRecord {
+  return { stage: 1, passedAt: null, attempts: 0 };
+}
+
+export function sanitizeExam(raw: unknown): ExamRecord {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  return {
+    stage: clampStage(r.stage),
+    passedAt: typeof r.passedAt === 'number' && r.passedAt > 0 ? r.passedAt : null,
+    attempts: typeof r.attempts === 'number' && r.attempts >= 0 ? Math.floor(r.attempts) : 0,
+  };
 }
 
 export function sanitizeProfile(raw: unknown): PlayerProfile {
@@ -139,6 +169,23 @@ export function setPlayerGender(gender: Gender): void {
 }
 
 /** 학습 기록 (같은 객체를 수정한 뒤 persist()를 호출한다) */
+/** 아랍어 시험 단계 (모든 주민의 대화 수준) */
+export function getExamStage(): ExamStage {
+  return current.exam.stage;
+}
+
+/** 시험 결과 기록. 합격하면 단계를 올린다 (시험 화면의 게임 로직에서만 부른다) */
+export function recordExamResult(stage: number, passed: boolean, now = Date.now()): ExamRecord {
+  const ex = current.exam;
+  ex.attempts++;
+  if (passed) {
+    ex.stage = clampStage(stage);
+    ex.passedAt = now;
+  }
+  persist();
+  return ex;
+}
+
 export function getLearningRecord(): LearningRecord {
   return current.learning;
 }

@@ -40,7 +40,7 @@ async function main() {
       for (const playerText of inputs) {
         const history: ChatRequest['history'] = [];
         // asked 단계만큼 앞 주제들을 이미 물은 것으로 만든다
-        let req: ChatRequest = { npcId: 'layla', playerText: null, history, memory: { facts: [], topics: [], conversations: (asked % 2) + 1 }, learner: { level: 1, unitTitleKo: '', comfortable: [], needsReview: [], seenOnly: [], studiedCount: 0 }, addressGender: g };
+        let req: ChatRequest = { npcId: 'layla', playerText: null, history, memory: { facts: [], topics: [], conversations: (asked % 2) + 1 }, learner: { examStage: 1, unitTitleKo: '', comfortable: [], needsReview: [], seenOnly: [], studiedCount: 0 }, addressGender: g };
         for (let i = 0; i < asked; i++) {
           const r = practiceReply({ ...req, playerText: 'نعم' });
           history.push({ role: 'player', text: 'نعم' }, { role: 'npc', text: r.reply.ar });

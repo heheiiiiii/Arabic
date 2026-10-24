@@ -395,7 +395,7 @@ try {
   const bBadge = await b.evaluate(() => ({ mode: document.querySelector('.mode-badge').dataset.mode, tag: document.querySelector('.src-tag')?.textContent }));
   check('B. [모의 AI] AI 모드 배지와 응답 출처 표시', bBadge.mode === 'ai' && bBadge.tag.includes('claude-opus-5-5'), JSON.stringify(bBadge));
   const sentReq = aiLog.at(-1);
-  check('B. AI 요청에 학습자 수준·기억·구조화 출력 포함 (키는 서버에만)', sentReq.output_config?.format?.type === 'json_schema' && sentReq.system?.[1]?.text.includes('Learner level'), sentReq.model);
+  check('B. AI 요청에 시험 단계·기억·구조화 출력 포함 (키는 서버에만)', sentReq.output_config?.format?.type === 'json_schema' && sentReq.system?.[2]?.text.includes('Exam stage'), sentReq.model);
   const bAudio = await waitAudio(b, (a) => a.some((x) => x.ended), 20000);
   check('[실제 재생] 미리 만들지 않은 AI 문장 → 서버 espeak-ng 음성 생성 후 재생', bTts.some((r) => r.status === 200 && r.type === 'audio/mpeg' && r.provider === 'espeak-ng') && bAudio.some((x) => x.ended && x.maxTime > 0.5), JSON.stringify(bTts.slice(0, 2)));
   const bundle = await b.evaluate(async () => {

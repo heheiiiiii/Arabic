@@ -1,5 +1,5 @@
 import { getLearnerProfile, learning } from '../learning';
-import { getNpcRecord, getPlayerGender, persist } from '../game/state';
+import { getExamStage, getNpcRecord, getPlayerGender, persist } from '../game/state';
 import type { ChatRequest, LearnerSummary, MemoryFact, NpcReply } from '../shared/conversation';
 import { LIMITS } from '../shared/conversation';
 import { practiceReply } from '../shared/practiceNpc';
@@ -33,7 +33,7 @@ export interface SessionState {
 export function learnerSummary(): LearnerSummary {
   const p = getLearnerProfile();
   return {
-    level: p.level,
+    examStage: getExamStage(),
     unitTitleKo: p.currentUnit.titleKo,
     comfortable: p.comfortable.map((e) => e.ar).slice(0, 30),
     needsReview: p.needsReview.map((e) => e.ar).slice(0, 15),

@@ -3,7 +3,7 @@ import { browserSttSupported, recorderSupported, STT_MESSAGES, VoiceInput, type 
 import { getHealth, submitAccessCode, type ServerHealth } from '../../conversation/client';
 import { forgetFact, friendshipLevel } from '../../conversation/memory';
 import { ConversationSession, type Entry } from '../../conversation/session';
-import { getNpcRecord, getPlayerGender, getSettings, persist, resetNpcRecord, setPlayerGender, updateSettings } from '../../game/state';
+import { getExamStage, getNpcRecord, getPlayerGender, getSettings, persist, resetNpcRecord, setPlayerGender, updateSettings } from '../../game/state';
 import { learning } from '../../learning';
 import { getItem } from '../../learning/content';
 import type { ArabicLine, MemoryFact, NpcReply } from '../../shared/conversation';
@@ -584,6 +584,7 @@ export class ConversationUI {
           `서버 음성: ${h?.tts.length ? h.tts.join(', ') : '없음'} · 서버 음성 인식: ${h?.stt ? h.stt.provider : '없음'} · ` +
           `브라우저 인식: ${browserSttSupported() ? '지원' : '미지원'} · 최근 재생 엔진: ${speech.lastEngine ?? '-'}`,
       ),
+      el('p', { class: 'muted small', 'data-role': 'exam-stage' }, `아랍어 시험 단계: ${getExamStage()}단계 — 모든 주민이 이 단계에 맞춰 말해요.`),
       ...this.accessSetting(h),
       el('h3', { class: 'related__title' }, `${this.npc.nameKo}가 기억하는 것`),
       facts,

@@ -10,7 +10,7 @@ const baseReq = (over: Partial<ChatRequest> = {}): ChatRequest => ({
   playerText: null,
   history: [],
   memory: { facts: [], topics: [], conversations: 0 },
-  learner: { level: 1, unitTitleKo: '', comfortable: [], needsReview: [], seenOnly: [], studiedCount: 0 },
+  learner: { examStage: 1, unitTitleKo: '', comfortable: [], needsReview: [], seenOnly: [], studiedCount: 0 },
   addressGender: 'm',
   ...over,
 });

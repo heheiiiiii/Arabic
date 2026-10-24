@@ -1,3 +1,4 @@
+import { stageVocabulary, type ExamStage } from '../../src/learning/stage';
 import type { ChatRequest } from '../../src/shared/conversation';
 import type { Persona } from './persona';
 
@@ -13,10 +14,23 @@ LANGUAGE RULES
 - "ko" fields are natural Korean translations (casual, friendly 반말 for Layla's lines; polite 해요체 for hint model answers).
 - "translit" is a simple Latin transliteration (e.g. "kayfa l-ḥāl?").
 
-LEVEL
-- Match the learner level given in the context. Level 1: 1–2 short sentences (max ~10 words total), mostly words the learner already knows. Level 2: up to 2–3 sentences. Level 3: natural short paragraphs are fine.
-- Reuse the learner's known expressions naturally. Weave in one "needs review" expression when it fits naturally. Introduce at most one new word per reply.
-- If the learner uses harder Arabic than their level, follow them; do not force them back to basics.
+STAGE (every villager follows the learner's Arabic exam stage, given as "Exam stage" 1-5)
+Words and expressions matter as much as length.
+- Use ONLY words from "STAGE VOCABULARY" (this stage and below) plus its function words.
+  Attached pronouns, the article and prefixes like wa-/bi-/li- on those words are fine.
+- New words: stages 1-2 none; stage 3 at most one; stages 4-5 at most two.
+  Put every new word in hint.words with its Korean meaning.
+- At stages 1-2, use the taught set phrases word for word; do not paraphrase them.
+- Stage 1: one sentence (about 6 words), fixed phrases, questions answerable with yes/no or one word.
+- Stage 2: up to two sentences (about 12 words), present tense, ask what/where/who.
+- Stage 3: two sentences, past tense is fine, link ideas with and/but/then.
+- Stage 4: two or three sentences; future, reasons and comparisons are fine; at most one common idiom.
+- Stage 5: a short paragraph; relative clauses and conditionals are fine; when the learner is stuck,
+  rephrase with easier words from the list.
+- Never use dialect or rare classical words. If the learner uses harder Arabic,
+  follow their topic but keep your words and grammar at their stage.
+- The hint model answer and alternatives use only the stage vocabulary.
+- Reuse the learner's "comfortable" expressions naturally, and weave in ONE "needs review" expression when it fits.
 
 CONVERSATION
 - React to what the player actually said, then usually ask ONE follow-up question related to it or to a new everyday topic (greetings, names, where you are from, food and drinks, the village, the market, family, hobbies, the weather).
@@ -46,11 +60,21 @@ SAFETY & GAME
 Respond ONLY with the JSON object required by the schema.`;
 }
 
+/** 단계별 고정 블록: 이 단계까지 쓸 수 있는 어휘 (단계마다 따로 캐시된다) */
+export function stageBlock(stage: ExamStage): string {
+  const { items, functionWords } = stageVocabulary(stage);
+  const lines = items.map((i) => `${i.ar} = ${i.ko}`);
+  return `STAGE VOCABULARY (exam stage ${stage}; everything here is allowed)
+Taught words and phrases:
+${lines.join('\n')}
+Function words: ${functionWords.join(' | ')}`;
+}
+
 export function dynamicContext(req: ChatRequest): string {
   const facts = req.memory.facts.map((f) => `- ${f.kind}: ${f.value}`).join('\n') || '- (nothing yet)';
   const list = (xs: string[]) => (xs.length ? xs.slice(0, 25).join(' | ') : '(none)');
   return `CONTEXT FOR THIS TURN
-Learner level: ${req.learner.level} (1=beginner). Current unit: ${req.learner.unitTitleKo || '-'}. Items studied at the desk: ${req.learner.studiedCount}.
+Exam stage: ${req.learner.examStage} (follow the STAGE rules for this stage). Current desk unit: ${req.learner.unitTitleKo || '-'}. Items studied at the desk: ${req.learner.studiedCount}.
 Expressions the learner has answered correctly before (comfortable): ${list(req.learner.comfortable)}
 Expressions that need review: ${list(req.learner.needsReview)}
 Expressions only seen once (not mastered): ${list(req.learner.seenOnly)}

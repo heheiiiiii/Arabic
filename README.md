@@ -75,7 +75,9 @@ scripts/build-audio.ts   학습 문장 음성 미리 만들기
 ### 회화 흐름 (`ConversationSession`)
 
 1. 대화창을 열면 `/api/health`로 모드 결정: **실제 AI** / **연습 모드(모의)**(서버에 AI 키 없음) / **오프라인 연습(모의)**(서버 없음)
-2. 요청: 최근 대화 12턴 + 기억 요약 + 학습자 요약(`getLearnerProfile()` → 익숙한 표현·복습 필요 표현·본 표현, 단원, 수준) + 플레이어 성별(`m`/`f`, 라일라가 이 성별로 부른다)
+2. 요청: 최근 대화 12턴 + 기억 요약 + **아랍어 시험 단계**(`exam.stage`, 모든 주민의 대화 수준) + 학습자 요약(`getLearnerProfile()` → 익숙한 표현·복습 필요 표현·본 표현, 단원) + 플레이어 성별(`m`/`f`, 라일라가 이 성별로 부른다)
+   - 시험 단계(임시 5단계, `src/learning/stage.ts`)마다 쓸 수 있는 어휘 목록(학습 항목 + 기능어)과 새 단어 수가 정해져 있다. 서버는 단계별 어휘 블록을 따로 캐시해 보내고, 대답의 단어를 목록과 대조한다. 1~3단계에서 목록 밖 단어가 허용보다 많으면 한 번 다시 쓰게 하고, 4~5단계는 아직 콘텐츠가 없어 `offStageWords`로 기록만 한다.
+   - 시험 화면은 아직 없다. 합격 처리는 `recordExamResult(stage, passed)`(게임 로직)만 할 수 있고, 그 전까지 모두 1단계다.
 3. 서버(AI): 구조화된 JSON 출력 → `parseReplyBody` 검증 → 하라카트 자동 검사(`findDiacriticIssues`) → 의심 문장만 부호 교정 1회(글자가 바뀌면 거부) → 남은 의심은 `diacriticsWarning`으로 UI 경고
 4. 클라이언트 게임 로직만 상태 변경: 친밀도(아랍어로 말할 때 +1, 하루 상한 6, 감점 없음), 기억(AI 제안 중 **플레이어가 실제로 한 말에 근거가 있는 것만** 저장), 대화에서 들은 학습 항목 기록(`recordHeard`, 학습 완료 아님)
 5. 실패 처리: 네트워크 단절 → 오프라인 연습으로 전환(명시), 그 밖의 오류(키 없음·제한 초과·서버 오류·시간 초과·잘못된 응답) → 종류 안내 + 다시 시도 / 연습 모드로 계속 (자동으로 가짜 응답을 넣지 않음)
@@ -90,10 +92,10 @@ scripts/build-audio.ts   학습 문장 음성 미리 만들기
 - 새 주민: `server/chat/persona.ts`에 성격 추가 + 마을에 `Villager` 배치 (기억은 `npcs[npcId]`에 따로 저장)
 - 새 공급자: `server/tts/types.ts`의 `TtsProvider` 구현 후 `tts/index.ts`에 등록 / `server/chat/anthropic.ts`를 본떠 채팅 공급자 추가
 
-### 저장 데이터 (`localStorage['arabic-village:v1']`, version 4)
+### 저장 데이터 (`localStorage['arabic-village:v1']`, version 5)
 
-`{ version, playerName, player: { gender, appearance: { hairStyle, eyes } }, learning: { items, heard, saved, position }, npcs: { layla: { facts, recent, topics, conversations, friendship, … } }, settings }`
-v1(이름만)·v2(학습 기록)·v3(성별이 대화 설정에 있던 형식) 데이터는 자동 이전되고, 더 새로운 버전은 덮어쓰지 않습니다. 녹음 원본은 어디에도 저장하지 않습니다.
+`{ version, playerName, player: { gender, appearance: { hairStyle, eyes } }, exam: { stage, passedAt, attempts }, learning: { items, heard, saved, position }, npcs: { layla: { facts, recent, topics, conversations, friendship, … } }, settings }`
+v1(이름만)·v2(학습 기록)·v3(성별이 대화 설정에 있던 형식)·v4(시험 기록 없음 → 1단계) 데이터는 자동 이전되고, 더 새로운 버전은 덮어쓰지 않습니다. 녹음 원본은 어디에도 저장하지 않습니다.
 성별(남/여)과 외형(머리·눈 모양)은 첫 화면에서 고릅니다. 성별은 꼭 골라야 하며(v3에서 '지정 안 함'이었다면 다시 고름), 대화창 설정에서도 바꿀 수 있고 연습 상대·AI 대화·책상 학습 설명에 모두 같은 값이 쓰입니다.
 대화창 **설정**에서 기억 보기·잊게 하기·관계 초기화·대화 기록 지우기를 할 수 있습니다.
 

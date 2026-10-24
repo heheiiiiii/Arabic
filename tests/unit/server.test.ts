@@ -40,7 +40,7 @@ const chatBody = (playerText: string | null) => ({
   playerText,
   history: [],
   memory: { facts: [], topics: [], conversations: 0 },
-  learner: { level: 1, unitTitleKo: '인사', comfortable: ['مَرْحَبًا'], needsReview: [], seenOnly: [], studiedCount: 1 },
+  learner: { examStage: 1, unitTitleKo: '인사', comfortable: ['مَرْحَبًا'], needsReview: [], seenOnly: [], studiedCount: 1 },
   addressGender: 'm',
 });
 const post = (path: string, body: unknown, headers: Record<string, string> = { 'content-type': 'application/json' }) =>
@@ -152,7 +152,7 @@ describe('음성 인식 어댑터 (모의 OpenAI 호환 서버)', () => {
 
 describe('Anthropic 공급자 (모의 Messages API 서버 — 실제 Claude 호출 아님)', () => {
   let mock: Awaited<ReturnType<typeof mockServer>>;
-  let mode: 'ok' | 'bad-harakat' | '401' | '429' | 'slow' | 'not-json' = 'ok';
+  let mode: 'ok' | 'bad-harakat' | 'off-stage' | '401' | '429' | 'slow' | 'not-json' = 'ok';
   const replyJson = (ar: string) => ({
     reply: { ar, ko: '안녕! 나는 라일라야.', translit: 'marḥaban' },
     understood: true,
@@ -174,11 +174,16 @@ describe('Anthropic 공급자 (모의 Messages API 서버 — 실제 Claude 호�
       if (mode === '429') return { status: 429, body: { type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } }, headers: { 'retry-after': '0' } };
       if (mode === 'slow') return { status: 200, body: message(replyJson('مَرْحَبًا!')), delayMs: 1500 };
       if (mode === 'not-json') return { status: 200, body: { ...message({}), content: [{ type: 'text', text: 'not json' }] } };
+      if (req.output_config?.format?.schema?.properties?.translit && !req.output_config.format.schema.properties.reply) {
+        // 단계 어휘 다시 쓰기 요청
+        return { status: 200, body: message({ ar: 'مَرْحَبًا! كَيْفَ الْحَالُ؟', ko: '안녕! 잘 지내?', translit: 'marḥaban! kayfa l-ḥāl?' }) };
+      }
       if (req.output_config?.format?.schema?.properties?.lines) {
         // 하라카트 교정 요청
         const lines = JSON.parse(req.messages[0].content) as string[];
         return { status: 200, body: message({ lines: lines.map((l) => (l === 'مرحبا! انا ليلى.' ? 'مَرْحَبًا! أَنَا لَيْلَى.' : l)) }) };
       }
+      if (mode === 'off-stage') return { status: 200, body: message(replyJson('مَرْحَبًا! ذَهَبْتُ إِلَى السُّوقِ الْكَبِيرِ.')) };
       return { status: 200, body: message(replyJson(mode === 'bad-harakat' ? 'مرحبا! انا ليلى.' : 'مَرْحَبًا! أَنَا لَيْلَى.')) };
     });
   });
@@ -202,7 +207,11 @@ describe('Anthropic 공급자 (모의 Messages API 서버 — 실제 Claude 호�
     expect(String(sent.headers['anthropic-beta'])).toContain('server-side-fallback-2026-07-01');
     expect(body).toMatchObject({ model: 'claude-opus-5-5', fallbacks: 'default', output_config: { effort: 'low', format: { type: 'json_schema' } } });
     expect(body.system[0].cache_control).toEqual({ type: 'ephemeral' });
-    expect(body.system[1].text).toContain('مَرْحَبًا'); // 학습자 프로필이 전달됨
+    // 단계별 어휘 블록도 캐시하고, 이번 턴 맥락(학습자 요약·시험 단계)은 마지막에 둔다
+    expect(body.system[1].cache_control).toEqual({ type: 'ephemeral' });
+    expect(body.system[1].text).toContain('STAGE VOCABULARY (exam stage 1');
+    expect(body.system[2].text).toContain('Exam stage: 1');
+    expect(body.system[2].text).toContain('مَرْحَبًا'); // 학습자 프로필이 전달됨
     expect(body.messages[0].role).toBe('user');
   });
 
@@ -212,6 +221,28 @@ describe('Anthropic 공급자 (모의 Messages API 서버 — 실제 Claude 호�
     const d = await (await handleApi(post('/api/chat', chatBody('مرحبا')), '5.5.5.6')).json();
     expect(d.reply.ar).toBe('مَرْحَبًا! أَنَا لَيْلَى.');
     expect(d.diacriticsWarning).toBeUndefined();
+  });
+
+  it('시험 단계 어휘 밖 단어가 많으면 한 번 다시 쓰게 한다 (1~3단계)', async () => {
+    mode = 'off-stage';
+    const { handleApi } = await app();
+    const before = mock.seen.length;
+    const d = await (await handleApi(post('/api/chat', chatBody('مرحبا')), '5.5.5.7')).json();
+    expect(d.reply.ar).toBe('مَرْحَبًا! كَيْفَ الْحَالُ؟');
+    expect(d.offStageWords).toBeUndefined();
+    expect(mock.seen.length - before).toBe(2); // 대답 + 다시 쓰기
+  });
+
+  it('4~5단계는 다시 쓰지 않고 목록 밖 단어를 기록만 한다', async () => {
+    mode = 'off-stage';
+    const { handleApi } = await app();
+    const before = mock.seen.length;
+    const body = { ...chatBody('مرحبا'), learner: { ...chatBody('مرحبا').learner, examStage: 4 } };
+    const d = await (await handleApi(post('/api/chat', body), '5.5.5.8')).json();
+    expect(d.reply.ar).toBe('مَرْحَبًا! ذَهَبْتُ إِلَى السُّوقِ الْكَبِيرِ.');
+    expect(d.offStageWords.length).toBeGreaterThan(0);
+    expect(mock.seen.length - before).toBe(1);
+    expect(JSON.parse(mock.seen.at(-1)!.body.toString()).system[2].text).toContain('Exam stage: 4');
   });
 
   it('키 오류·사용량 제한·시간 초과·잘못된 응답을 서로 다른 오류로 돌려준다 (가짜 응답으로 바꾸지 않음)', async () => {
