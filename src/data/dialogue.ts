@@ -13,6 +13,8 @@ export interface DialogueLine {
   ar: string;
   /** 자연스러운 한국어 번역 */
   ko: string;
+  /** 이 대사에 들어 있는 학습 항목 ID (src/learning/content). 책상에서 배운 표현과 연결된다. */
+  refs?: string[];
   /** 선택: 짧은 학습 메모. 한국어 설명과 아랍어 예시를 분리해 두어야 방향이 섞이지 않는다. */
   note?: DialogueNote;
 }
@@ -34,13 +36,14 @@ export const LAYLA: VillagerDef = {
   nameAr: 'لَيْلَى',
   nameKo: '라일라',
   greeting: [
-    { speaker: 'villager', ar: 'مَرْحَبًا!', ko: '안녕!' },
-    { speaker: 'villager', ar: 'أَنَا لَيْلَى.', ko: '나는 라일라야.' },
-    { speaker: 'villager', ar: 'أَهْلًا وَسَهْلًا فِي قَرْيَتِنَا!', ko: '우리 마을에 온 걸 환영해!' },
+    { speaker: 'villager', ar: 'مَرْحَبًا!', ko: '안녕!', refs: ['s.marhaban'] },
+    { speaker: 'villager', ar: 'أَنَا لَيْلَى.', ko: '나는 라일라야.', refs: ['w.ana'] },
+    { speaker: 'villager', ar: 'أَهْلًا وَسَهْلًا فِي قَرْيَتِنَا!', ko: '우리 마을에 온 걸 환영해!', refs: ['s.ahlan_qarya'] },
     {
       speaker: 'villager',
       ar: 'كَيْفَ الْحَالُ؟',
       ko: '요즘 어때?',
+      refs: ['s.kayfa_hal'],
       note: {
         text: '상대를 직접 가리켜 "너는 어떻게 지내?"라고 물을 때는 상대의 성별에 따라 끝소리가 달라져요.',
         examples: [
@@ -49,7 +52,7 @@ export const LAYLA: VillagerDef = {
         ],
       },
     },
-    { speaker: 'player', ar: 'أَنَا بِخَيْرٍ، شُكْرًا.', ko: '잘 지내, 고마워.' },
-    { speaker: 'villager', ar: 'الْحَمْدُ لِلَّهِ! إِلَى اللِّقَاءِ!', ko: '다행이다! 또 보자!' },
+    { speaker: 'player', ar: 'أَنَا بِخَيْرٍ، شُكْرًا.', ko: '잘 지내, 고마워.', refs: ['s.bikhayr'] },
+    { speaker: 'villager', ar: 'الْحَمْدُ لِلَّهِ! إِلَى اللِّقَاءِ!', ko: '다행이다! 또 보자!', refs: ['s.hamdulillah', 's.ila_liqa'] },
   ],
 };

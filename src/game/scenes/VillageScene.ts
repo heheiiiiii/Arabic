@@ -2,9 +2,8 @@ import { SCENES, TILE } from '../config';
 import { Villager } from '../entities/Villager';
 import { TileTarget } from '../world/TileTarget';
 import { VILLAGE_MAP, VILLAGE_SPAWN, VILLAGER_TILE } from '../world/maps';
-import { getPlayerName } from '../state';
 import { LAYLA } from '../../data/dialogue';
-import { dialogueUI } from '../../ui/DialogueUI';
+import { conversationUI } from '../../ui/conversation/ConversationUI';
 import { hud } from '../../ui/Hud';
 import { WorldScene } from './WorldScene';
 
@@ -22,7 +21,7 @@ export class VillageScene extends WorldScene {
 
     const layla = new Villager(this, LAYLA, VILLAGER_TILE, 'layla', (v) => {
       v.faceTowards(this.player.x);
-      dialogueUI.open(v.def, v.def.greeting, getPlayerName());
+      conversationUI.open({ id: v.def.id, nameAr: v.def.nameAr, nameKo: v.def.nameKo });
     });
     this.blockTile(layla.tile.col, layla.tile.row);
 
@@ -36,7 +35,7 @@ export class VillageScene extends WorldScene {
     }
 
     this.setupCamera(true);
-    hud.setPlace('🏘️ 마을', '땅을 눌러 이동하고, 주민이나 빨간 지붕 집 문을 눌러 보세요.');
+    hud.setPlace('🏘️ 마을', '땅을 눌러 이동하고, 라일라를 눌러 아랍어로 대화해 보세요. 집 책상에서 공부할 수 있어요.');
     hud.setExit(null);
   }
 }
