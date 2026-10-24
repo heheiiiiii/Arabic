@@ -179,7 +179,7 @@ describe('복습 문제', () => {
 describe('저장 데이터 버전 관리', () => {
   it('1단계 저장 데이터(이름만)를 현재 형식으로 옮긴다', () => {
     const r = parseSave({ playerName: '  민지  ' })!;
-    expect(r.data).toEqual({ version: SAVE_VERSION, playerName: '민지', player: { gender: null, appearance: { hairStyle: 'short', eyes: 'dot' } }, learning: emptyLearningRecord(), npcs: {}, settings: defaultSettings() });
+    expect(r.data).toEqual({ version: SAVE_VERSION, playerName: '민지', player: { gender: null, appearance: { hairStyle: 'short', eyes: 'dot' } }, exam: { stage: 1, passedAt: null, attempts: 0 }, learning: emptyLearningRecord(), npcs: {}, settings: defaultSettings() });
     expect(r.fromFuture).toBe(false);
   });
 

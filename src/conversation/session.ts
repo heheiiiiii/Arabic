@@ -1,5 +1,5 @@
 import { getLearnerProfile, learning } from '../learning';
-import { getNpcRecord, getPlayerGender, persist } from '../game/state';
+import { getExamStage, getNpcRecord, getPlayerGender, persist } from '../game/state';
 import type { ChatRequest, LearnerSummary, MemoryFact, NpcReply } from '../shared/conversation';
 import { LIMITS } from '../shared/conversation';
 import { practiceReply } from '../shared/practiceNpc';
@@ -33,7 +33,7 @@ export interface SessionState {
 export function learnerSummary(): LearnerSummary {
   const p = getLearnerProfile();
   return {
-    level: p.level,
+    examStage: getExamStage(),
     unitTitleKo: p.currentUnit.titleKo,
     comfortable: p.comfortable.map((e) => e.ar).slice(0, 30),
     needsReview: p.needsReview.map((e) => e.ar).slice(0, 15),
@@ -77,6 +77,9 @@ export class ConversationSession {
     } else if (h.chat?.provider === 'anthropic') {
       this.state.mode = 'ai';
       this.state.modeDetail = `실제 AI (${h.chat.model ?? 'Claude'})`;
+    } else if (h.access === 'required') {
+      this.state.mode = 'practice';
+      this.state.modeDetail = '초대 코드를 입력하지 않아 연습 상대(모의)와 대화해요. 대화 설정에서 초대 코드를 넣으면 실제 AI와 대화할 수 있어요.';
     } else {
       this.state.mode = 'practice';
       this.state.modeDetail = 'AI 키가 설정되지 않아 연습 상대(모의)와 대화해요. 정해진 표현만 알아들어요.';

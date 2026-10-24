@@ -2,9 +2,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import { parseReplyBody, type ChatRequest, type NpcReply } from '../../src/shared/conversation';
 import { config } from '../config';
 import { ProviderError } from '../http';
+import { allowDaily } from '../rateLimit';
 import { arabicFields, sameLetters, suspiciousArabic } from './diacritics';
 import type { Persona } from './persona';
-import { dynamicContext, REPLY_SCHEMA, stableInstructions, toMessages } from './prompt';
+import { NEW_WORDS_ALLOWED, offStageWords, stageVocabulary, type ExamStage } from '../../src/learning/stage';
+import { dynamicContext, REPLY_SCHEMA, stableInstructions, stageBlock, toMessages } from './prompt';
 
 let client: Anthropic | null = null;
 
@@ -37,6 +39,8 @@ function mapError(e: unknown): ProviderError {
 }
 
 async function callJson(system: Anthropic.Beta.BetaTextBlockParam[], messages: Anthropic.Beta.BetaMessageParam[], schema: object, maxTokens: number) {
+  // 하루 상한은 요청이 아니라 모델 호출마다 센다 (하라카트 교정 호출 포함)
+  if (!allowDaily('ai', config.chat.dailyLimit)) throw new ProviderError('rate_limited', '오늘의 AI 대화 사용량을 모두 썼어요. 연습 모드로 계속할 수 있어요.');
   const res = await getClient().beta.messages.create({
     model: config.chat.model,
     max_tokens: maxTokens,
@@ -91,6 +95,52 @@ async function repairDiacritics(body: Omit<NpcReply, 'source' | 'provider' | 'mo
   return arabicFields(body).filter((f) => suspiciousArabic(f.text)).map((f) => f.text);
 }
 
+const LINE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['ar', 'ko', 'translit'],
+  properties: { ar: { type: 'string' }, ko: { type: 'string' }, translit: { type: 'string' } },
+};
+
+/** 어휘를 자동 검사하는 단계. 4~5단계는 아직 학습 콘텐츠가 없어 목록이 짧으므로 기록만 한다 */
+const REWRITE_STAGES: readonly ExamStage[] = [1, 2, 3];
+
+/** 목록 밖이어도 허용하는 말: 주민 자신의 이름, 플레이어가 직접 한 말과 기억한 사실 (이름 등) */
+function playerWords(req: ChatRequest, persona: Persona): string[] {
+  return [persona.nameAr, req.playerText ?? '', ...req.history.filter((t) => t.role === 'player').map((t) => t.text), ...req.memory.facts.map((f) => f.value)];
+}
+
+/**
+ * 단계 어휘 검사: 대답에 목록 밖 단어가 허용보다 많으면 그 단어만 바꿔 다시 쓰게 한다 (1회).
+ * 다시 써도 넘으면 그대로 두고, 남은 단어를 돌려준다 (측정·기록용).
+ */
+async function enforceStage(body: Omit<NpcReply, 'source' | 'provider' | 'model'>, req: ChatRequest, persona: Persona): Promise<string[]> {
+  const stage = req.learner.examStage;
+  const allowed = playerWords(req, persona);
+  const off = offStageWords(body.reply.ar, stage, allowed);
+  if (off.length <= NEW_WORDS_ALLOWED[stage] || !REWRITE_STAGES.includes(stage)) return off;
+  try {
+    const { functionWords, items } = stageVocabulary(stage);
+    const { json } = await callJson(
+      [{ type: 'text', text: `You simplify Modern Standard Arabic for a learner at exam stage ${stage}. Rewrite the line so that it keeps its meaning but replaces the listed words with words from the allowed list (at most ${NEW_WORDS_ALLOWED[stage]} other words). Keep it short, write full and correct harakat, and give a natural Korean translation (casual 반말) and a simple transliteration.\nAllowed words: ${[...items.map((i) => i.ar), ...functionWords].join(' | ')}` }],
+      [{ role: 'user', content: JSON.stringify({ line: body.reply, replace: off }) }],
+      LINE_SCHEMA,
+      1000,
+    );
+    const o = json as { ar?: unknown; ko?: unknown; translit?: unknown };
+    if (typeof o.ar === 'string' && o.ar.trim() && typeof o.ko === 'string') {
+      const after = offStageWords(o.ar, stage, allowed);
+      if (after.length < off.length) {
+        body.reply = { ar: o.ar.trim(), ko: o.ko.trim(), ...(typeof o.translit === 'string' && o.translit.trim() ? { translit: o.translit.trim() } : {}) };
+        return after;
+      }
+    }
+  } catch {
+    // 다시 쓰기 실패(상한 초과 포함)는 치명적이지 않다: 원래 대답을 쓴다
+  }
+  return off;
+}
+
 function setField(body: Omit<NpcReply, 'source' | 'provider' | 'model'>, path: string, value: string) {
   if (path === 'reply') body.reply.ar = value;
   else if (path === 'hint.model') body.hint.model.ar = value;
@@ -104,6 +154,7 @@ export async function anthropicReply(req: ChatRequest, persona: Persona): Promis
     const { json, model } = await callJson(
       [
         { type: 'text', text: stableInstructions(persona), cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: stageBlock(req.learner.examStage), cache_control: { type: 'ephemeral' } },
         { type: 'text', text: dynamicContext(req) },
       ],
       toMessages(req),
@@ -112,8 +163,17 @@ export async function anthropicReply(req: ChatRequest, persona: Persona): Promis
     );
     const body = parseReplyBody(json);
     if (!body) throw new ProviderError('invalid_response', 'AI 응답 형식이 올바르지 않습니다');
+    const offStage = await enforceStage(body, req, persona);
+    if (offStage.length) console.info(`[chat] stage ${req.learner.examStage}: ${offStage.length} word(s) outside stage vocabulary`);
     const warnings = await repairDiacritics(body);
-    return { ...body, source: 'ai', provider: 'anthropic', model, ...(warnings.length ? { diacriticsWarning: warnings } : {}) };
+    return {
+      ...body,
+      source: 'ai',
+      provider: 'anthropic',
+      model,
+      ...(warnings.length ? { diacriticsWarning: warnings } : {}),
+      ...(offStage.length ? { offStageWords: offStage.slice(0, 10) } : {}),
+    };
   } catch (e) {
     throw mapError(e);
   }

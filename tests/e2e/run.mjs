@@ -368,7 +368,7 @@ async function main() {
     await startGame(page);
     await openStudy(page);
     const stats2 = await statValues(page);
-    check('새로고침 후 학습 진도 복원', saved.version === 4 && Object.keys(saved.learning.items).length === 10 && stats2[0] === '6 / 49' && stats2[1] === '4 / 43', stats2.join(' | '));
+    check('새로고침 후 학습 진도 복원', saved.version === 5 && Object.keys(saved.learning.items).length === 10 && stats2[0] === '6 / 49' && stats2[1] === '4 / 43', stats2.join(' | '));
     await page.click('[data-topic=words]');
     check('이어서 배우기: 아직 안 배운 첫 단어부터', (await page.getAttribute('.ar--hero', 'data-item-id')) === 'w.nur');
     await page.keyboard.press('Escape');
@@ -385,7 +385,7 @@ async function main() {
     const oldName = await pOld.inputValue('#player-name');
     await startGame(pOld);
     const migrated = await pOld.evaluate(() => JSON.parse(localStorage.getItem('arabic-village:v1')));
-    check('1단계 저장 데이터(이름만) → 현재 버전(4)으로 이전', oldName === '옛 이름' && migrated.version === 4 && migrated.playerName === '옛 이름' && typeof migrated.learning === 'object', JSON.stringify(migrated).slice(0, 80));
+    check('1단계 저장 데이터(이름만) → 현재 버전(5)으로 이전, 시험 1단계', oldName === '옛 이름' && migrated.version === 5 && migrated.exam?.stage === 1 && migrated.playerName === '옛 이름' && typeof migrated.learning === 'object', JSON.stringify(migrated).slice(0, 80));
     await ctxOld.close();
 
     // ═════ 5. 음성 재생 상태 (가짜 아랍어 음성 주입) ═════

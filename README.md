@@ -61,7 +61,8 @@ src/                     브라우저 (Vite + TypeScript + Phaser 3, UI는 HTML/
   ui/conversation/       자유 회화 창, 화면 아랍어 자판
   ui/study/              공부 책상 (단어·문장·복습·대화에서 만난 표현)
 server/                  Node (tsx) — Web 표준 Request→Response 핸들러
-  app.ts                 /api/health, /api/chat, /api/tts, /api/stt + 사용량 제한·CORS
+  app.ts                 /api/health, /api/access, /api/chat, /api/tts, /api/stt + 사용량 제한·CORS
+  access.ts              초대 코드(ACCESS_CODE) 확인과 쿠키
   chat/                  Anthropic 어댑터(구조화 출력, 하라카트 교정 단계), 프롬프트, NPC 성격(persona.ts)
   tts/                   espeak-ng(로컬) / Azure / OpenAI 어댑터 + 디스크 캐시
   stt/                   OpenAI 호환 음성 인식 어댑터
@@ -74,7 +75,9 @@ scripts/build-audio.ts   학습 문장 음성 미리 만들기
 ### 회화 흐름 (`ConversationSession`)
 
 1. 대화창을 열면 `/api/health`로 모드 결정: **실제 AI** / **연습 모드(모의)**(서버에 AI 키 없음) / **오프라인 연습(모의)**(서버 없음)
-2. 요청: 최근 대화 12턴 + 기억 요약 + 학습자 요약(`getLearnerProfile()` → 익숙한 표현·복습 필요 표현·본 표현, 단원, 수준) + 플레이어 성별(`m`/`f`, 라일라가 이 성별로 부른다)
+2. 요청: 최근 대화 12턴 + 기억 요약 + **아랍어 시험 단계**(`exam.stage`, 모든 주민의 대화 수준) + 학습자 요약(`getLearnerProfile()` → 익숙한 표현·복습 필요 표현·본 표현, 단원) + 플레이어 성별(`m`/`f`, 라일라가 이 성별로 부른다)
+   - 시험 단계(임시 5단계, `src/learning/stage.ts`)마다 쓸 수 있는 어휘 목록(학습 항목 + 기능어)과 새 단어 수가 정해져 있다. 서버는 단계별 어휘 블록을 따로 캐시해 보내고, 대답의 단어를 목록과 대조한다. 1~3단계에서 목록 밖 단어가 허용보다 많으면 한 번 다시 쓰게 하고, 4~5단계는 아직 콘텐츠가 없어 `offStageWords`로 기록만 한다.
+   - 시험 화면은 아직 없다. 합격 처리는 `recordExamResult(stage, passed)`(게임 로직)만 할 수 있고, 그 전까지 모두 1단계다.
 3. 서버(AI): 구조화된 JSON 출력 → `parseReplyBody` 검증 → 하라카트 자동 검사(`findDiacriticIssues`) → 의심 문장만 부호 교정 1회(글자가 바뀌면 거부) → 남은 의심은 `diacriticsWarning`으로 UI 경고
 4. 클라이언트 게임 로직만 상태 변경: 친밀도(아랍어로 말할 때 +1, 하루 상한 6, 감점 없음), 기억(AI 제안 중 **플레이어가 실제로 한 말에 근거가 있는 것만** 저장), 대화에서 들은 학습 항목 기록(`recordHeard`, 학습 완료 아님)
 5. 실패 처리: 네트워크 단절 → 오프라인 연습으로 전환(명시), 그 밖의 오류(키 없음·제한 초과·서버 오류·시간 초과·잘못된 응답) → 종류 안내 + 다시 시도 / 연습 모드로 계속 (자동으로 가짜 응답을 넣지 않음)
@@ -89,10 +92,10 @@ scripts/build-audio.ts   학습 문장 음성 미리 만들기
 - 새 주민: `server/chat/persona.ts`에 성격 추가 + 마을에 `Villager` 배치 (기억은 `npcs[npcId]`에 따로 저장)
 - 새 공급자: `server/tts/types.ts`의 `TtsProvider` 구현 후 `tts/index.ts`에 등록 / `server/chat/anthropic.ts`를 본떠 채팅 공급자 추가
 
-### 저장 데이터 (`localStorage['arabic-village:v1']`, version 4)
+### 저장 데이터 (`localStorage['arabic-village:v1']`, version 5)
 
-`{ version, playerName, player: { gender, appearance: { hairStyle, eyes } }, learning: { items, heard, saved, position }, npcs: { layla: { facts, recent, topics, conversations, friendship, … } }, settings }`
-v1(이름만)·v2(학습 기록)·v3(성별이 대화 설정에 있던 형식) 데이터는 자동 이전되고, 더 새로운 버전은 덮어쓰지 않습니다. 녹음 원본은 어디에도 저장하지 않습니다.
+`{ version, playerName, player: { gender, appearance: { hairStyle, eyes } }, exam: { stage, passedAt, attempts }, learning: { items, heard, saved, position }, npcs: { layla: { facts, recent, topics, conversations, friendship, … } }, settings }`
+v1(이름만)·v2(학습 기록)·v3(성별이 대화 설정에 있던 형식)·v4(시험 기록 없음 → 1단계) 데이터는 자동 이전되고, 더 새로운 버전은 덮어쓰지 않습니다. 녹음 원본은 어디에도 저장하지 않습니다.
 성별(남/여)과 외형(머리·눈 모양)은 첫 화면에서 고릅니다. 성별은 꼭 골라야 하며(v3에서 '지정 안 함'이었다면 다시 고름), 대화창 설정에서도 바꿀 수 있고 연습 상대·AI 대화·책상 학습 설명에 모두 같은 값이 쓰입니다.
 대화창 **설정**에서 기억 보기·잊게 하기·관계 초기화·대화 기록 지우기를 할 수 있습니다.
 
@@ -107,7 +110,8 @@ v1(이름만)·v2(학습 기록)·v3(성별이 대화 설정에 있던 형식) �
 - **HTTPS 필수 (마이크)**: 브라우저는 HTTPS 또는 `localhost`에서만 마이크를 허용합니다. 리버스 프록시(예: Caddy, Nginx)나 플랫폼의 HTTPS 뒤에서 `npm start`를 실행하세요.
 - **환경 변수**: 키는 서버 환경 변수로만. `.env`는 `.gitignore`에 포함되어 있습니다.
 - **CORS**: 기본은 같은 출처만. 게임 페이지와 API가 다른 도메인이면 `ALLOWED_ORIGINS`에 페이지 주소를 넣으세요.
-- **사용량 제한**: IP당 분당 chat 20 / tts 60 / stt 15, AI 하루 전체 `AI_DAILY_LIMIT`(기본 500). 메모리 기반이라 인스턴스가 여러 개면 공용 저장소(Redis 등) 기반으로 바꿔야 합니다.
+- **초대 코드**: `ACCESS_CODE`를 설정하면 코드를 입력한 브라우저만 실제 AI 대화·유료 음성(Azure·OpenAI)·서버 음성 인식을 씁니다. 초대 링크 `https://게임주소/?access=코드`로 들어오거나 대화 설정에서 입력하면, 서버가 HttpOnly 쿠키(180일)를 줍니다. 코드가 없어도 게임·학습·연습 모드·espeak-ng 음성은 동작합니다. 쿠키를 쓰므로 게임 페이지와 API가 같은 주소여야 합니다.
+- **사용량 제한**: IP당 분당 chat 60 / tts 200 / stt 45 (`CHAT_PER_MINUTE` 등으로 변경). 리버스 프록시 뒤에서는 모든 사용자가 프록시 IP 하나로 보여 이 상한을 함께 씁니다. 하루 전체 상한: AI 모델 호출 `AI_DAILY_LIMIT`(기본 500, 하라카트 교정 호출 포함), 유료 음성 새로 만들기 `TTS_DAILY_LIMIT`(기본 2000, 넘으면 espeak-ng), 서버 음성 인식 `STT_DAILY_LIMIT`(기본 300). 메모리 기반이라 서버를 다시 시작하면 초기화되고, 인스턴스가 여러 개면 공용 저장소(Redis 등) 기반으로 바꿔야 합니다.
 - **요청 제한**: 대화 본문 24KB, 플레이어 문장 300자, 녹음 2MB·15초, TTS 문장 400자, 서버 AI 시간 제한 30초(클라이언트 45초).
 - **정적 호스팅만 할 때**: `npm run build` 결과만 올려도 학습·연습 대화·미리 만든 음성은 동작합니다(오프라인 연습 모드). AI·서버 음성·서버 인식은 동작하지 않습니다.
 

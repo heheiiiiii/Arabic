@@ -4,6 +4,7 @@
  * 원칙: AI 응답은 "제안"일 뿐이다. 친밀도·퀘스트·보상·학습 기록 같은 게임 상태는
  * 이 응답을 받은 클라이언트의 게임 로직이 검증한 뒤에만 바꾼다.
  */
+import { clampStage, type ExamStage } from '../learning/stage';
 
 export const LIMITS = {
   /** 플레이어 한 번 발화 최대 길이 (문자) */
@@ -46,7 +47,8 @@ export interface MemoryFact {
 
 /** AI에 전달하는 학습자 요약 (learning/profile.ts의 LearnerProfile에서 만든다) */
 export interface LearnerSummary {
-  level: number;
+  /** 아랍어 시험 단계 (1~EXAM_STAGES). 모든 주민의 대화 수준은 이것만 따른다 */
+  examStage: ExamStage;
   unitTitleKo: string;
   /** 맞힌 적 있는 표현 (학습용 표기) */
   comfortable: string[];
@@ -98,6 +100,8 @@ export interface NpcReply {
   topic: string;
   /** 서버 자동 검사에서 모음 부호가 의심되는 문장 (있으면 UI에 경고) */
   diacriticsWarning?: string[];
+  /** 시험 단계 어휘 목록 밖이라고 판단된 단어 (일반 표기, 측정용) */
+  offStageWords?: string[];
 }
 
 export type ChatErrorCode = 'bad_request' | 'rate_limited' | 'not_configured' | 'provider_error' | 'invalid_response' | 'timeout' | 'network';
@@ -166,6 +170,7 @@ export function parseNpcReply(raw: unknown): NpcReply | null {
   if (!body) return null;
   const o = raw as Record<string, unknown>;
   if (o.source !== 'ai' && o.source !== 'practice') return null;
+  const off = Array.isArray(o.offStageWords) ? o.offStageWords.filter((w): w is string => isStr(w, 60)).slice(0, 10) : undefined;
   const warn = Array.isArray(o.diacriticsWarning) ? o.diacriticsWarning.filter((w): w is string => typeof w === 'string').slice(0, 5) : undefined;
   return {
     ...body,
@@ -173,6 +178,7 @@ export function parseNpcReply(raw: unknown): NpcReply | null {
     provider: isStr(o.provider, 60) ? o.provider : 'unknown',
     ...(isStr(o.model, 80) ? { model: o.model } : {}),
     ...(warn && warn.length ? { diacriticsWarning: warn } : {}),
+    ...(off && off.length ? { offStageWords: off } : {}),
   };
 }
 
@@ -203,7 +209,7 @@ export function validateChatRequest(raw: unknown): ChatRequest | string {
   const arr = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => isStr(x, 200)).slice(0, 40) : []);
   if (!isGender(o.addressGender)) return 'addressGender는 m 또는 f여야 합니다';
   const learner: LearnerSummary = {
-    level: typeof l.level === 'number' ? Math.min(3, Math.max(1, Math.round(l.level))) : 1,
+    examStage: clampStage(l.examStage),
     unitTitleKo: isStr(l.unitTitleKo, 40) ? l.unitTitleKo : '',
     comfortable: arr(l.comfortable),
     needsReview: arr(l.needsReview),

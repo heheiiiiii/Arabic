@@ -17,6 +17,15 @@ export const config = {
   port: num('PORT', 8787),
   /** 다른 출처(도메인)에서 API를 부를 수 있게 허용할 목록 (쉼표 구분). 비우면 같은 출처만 */
   allowedOrigins: (env('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  /** 초대 코드. 설정하면 이 코드를 입력한 브라우저만 유료 기능(AI 대화·클라우드 음성·서버 음성 인식)을 쓴다 */
+  accessCode: env('ACCESS_CODE'),
+
+  /** IP별 분당 요청 상한. 리버스 프록시 뒤에서는 모든 사용자가 한 IP로 보이므로 여유 있게 둔다 */
+  perMinute: {
+    chat: num('CHAT_PER_MINUTE', 60),
+    tts: num('TTS_PER_MINUTE', 200),
+    stt: num('STT_PER_MINUTE', 45),
+  },
 
   chat: {
     anthropicKey: env('ANTHROPIC_API_KEY'),
@@ -24,7 +33,7 @@ export const config = {
     model: env('AI_MODEL') ?? 'claude-opus-5-5',
     effort: (env('AI_EFFORT') ?? 'low') as 'low' | 'medium' | 'high',
     timeoutMs: num('AI_TIMEOUT_MS', 30_000),
-    /** 하루 전체 AI 요청 상한 (비용 보호) */
+    /** 하루 전체 AI 모델 호출 상한 (비용 보호). 하라카트 교정 호출도 센다 */
     dailyLimit: num('AI_DAILY_LIMIT', 500),
   },
 
@@ -39,6 +48,8 @@ export const config = {
     openaiVoice: env('OPENAI_TTS_VOICE') ?? 'alloy',
     espeakVoice: env('ESPEAK_VOICE') ?? 'ar',
     cacheDir: env('TTS_CACHE_DIR') ?? '.cache/tts',
+    /** 하루 전체 유료 음성 합성(Azure·OpenAI) 상한. 넘으면 espeak-ng로 대신한다. 캐시 재생은 세지 않는다 */
+    dailyLimit: num('TTS_DAILY_LIMIT', 2000),
   },
 
   stt: {
@@ -47,5 +58,7 @@ export const config = {
     baseUrl: env('STT_BASE_URL') ?? 'https://api.openai.com/v1',
     model: env('STT_MODEL') ?? 'whisper-1',
     timeoutMs: num('STT_TIMEOUT_MS', 20_000),
+    /** 하루 전체 서버 음성 인식 상한 (비용 보호) */
+    dailyLimit: num('STT_DAILY_LIMIT', 300),
   },
 };

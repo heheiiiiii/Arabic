@@ -3,14 +3,19 @@ import path from 'node:path';
 import { textHash } from '../../src/shared/hash';
 import { config } from '../config';
 import { ProviderError } from '../http';
+import { allowDaily } from '../rateLimit';
 import { azureProvider, openaiProvider } from './cloud';
 import { espeakProvider } from './espeak';
 import type { TtsProvider, TtsResult } from './types';
 
 const ALL: Record<string, TtsProvider> = { azure: azureProvider, openai: openaiProvider, espeak: espeakProvider };
 
-export async function availableTtsProviders(): Promise<TtsProvider[]> {
-  const list = config.tts.order.map((id) => ALL[id]).filter((p): p is TtsProvider => !!p);
+/** 무료 공급자 (로컬 espeak-ng). 나머지는 호출마다 과금된다 */
+const isPaid = (p: TtsProvider) => p !== espeakProvider;
+
+/** @param paid 유료 공급자도 쓸 수 있는지 (초대 코드) */
+export async function availableTtsProviders(paid = true): Promise<TtsProvider[]> {
+  const list = config.tts.order.map((id) => ALL[id]).filter((p): p is TtsProvider => !!p && (paid || !isPaid(p)));
   const ok = await Promise.all(list.map((p) => p.available()));
   return list.filter((_, i) => ok[i]);
 }
@@ -28,8 +33,8 @@ export function sanitizeTtsText(text: string): string | null {
  * 음성 합성 + 디스크 캐시. 같은 문장·같은 음성은 다시 만들지 않는다.
  * 캐시에는 학습용 문장 음성만 저장된다 (사용자 녹음은 저장하지 않는다).
  */
-export async function synthesize(text: string): Promise<TtsResult & { provider: string; cached: boolean }> {
-  const providers = await availableTtsProviders();
+export async function synthesize(text: string, paid = true): Promise<TtsResult & { provider: string; cached: boolean }> {
+  const providers = await availableTtsProviders(paid);
   if (providers.length === 0) throw new ProviderError('not_configured', '사용할 수 있는 서버 음성 공급자가 없습니다');
   let lastErr: unknown = null;
   for (const p of providers) {
@@ -39,6 +44,11 @@ export async function synthesize(text: string): Promise<TtsResult & { provider: 
       return { audio, contentType: 'audio/mpeg', provider: p.id, cached: true };
     } catch {
       // 캐시 없음
+    }
+    // 유료 공급자는 하루 상한 안에서만 새로 만든다 (넘으면 다음 공급자, 보통 espeak-ng)
+    if (isPaid(p) && !allowDaily('tts', config.tts.dailyLimit)) {
+      lastErr = new ProviderError('rate_limited', '오늘의 서버 음성 사용량을 모두 썼어요');
+      continue;
     }
     try {
       const r = await p.synthesize(text);
