@@ -25,6 +25,8 @@ npm run dev          # http://localhost:5173  (게임 + /api 서버가 한 프�
 
 Node 20.19+ / 22.12+ 필요. 로컬 음성: `apt-get install espeak-ng ffmpeg`.
 
+GitHub Actions(`.github/workflows/ci.yml`)가 PR과 `main` 푸시마다 타입 검사·단위 테스트·빌드(`check`)와 브라우저 E2E(`e2e`)를 실행합니다.
+
 ## 기능 상태
 
 | 기능 | 키 없이 | 필요한 설정 |
