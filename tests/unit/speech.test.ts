@@ -87,7 +87,7 @@ describe('음성 출력', () => {
     const speech = await loadSpeech();
     const info = await speech.info();
     expect(info.voice?.lang).toBe('ar-SA');
-    expect(await speech.speak('كَيْفَ الْحَالُ؟', 'a')).toEqual({ ok: true });
+    expect(await speech.speak('كَيْفَ الْحَالُ؟', 'a')).toEqual({ ok: true, engine: 'browser' });
     expect(log).toContain('speak:كَيْفَ الْحَالُ؟');
     expect(speech.currentKey).toBe('a');
   });
@@ -107,11 +107,12 @@ describe('음성 출력', () => {
   it('stop()은 재생 상태를 지우고 구독자에게 알린다', async () => {
     installFake([{ name: 'Saudi', lang: 'ar-SA' }]);
     const speech = await loadSpeech();
-    const seen: (string | null)[] = [];
-    speech.subscribe((k) => seen.push(k));
+    const seen: string[] = [];
+    speech.subscribe((k, st) => seen.push(`${k}:${st}`));
     await speech.speak('مَرْحَبًا', 'a');
+    await new Promise((r) => setTimeout(r, 0));
     speech.stop();
-    expect(seen).toEqual(['a', null]);
+    expect(seen).toEqual(['a:loading', 'a:playing', 'null:null']);
     expect(speech.currentKey).toBeNull();
   });
 
@@ -126,7 +127,10 @@ describe('음성 출력', () => {
     const { synth } = installFake([{ name: 'Saudi', lang: 'ar-SA' }]);
     const speech = await loadSpeech();
     await speech.speak('مَرْحَبًا', 'a');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(speech.currentKey).toBe('a');
     synth.finish();
+    await new Promise((r) => setTimeout(r, 0));
     expect(speech.currentKey).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import { buildLearnerProfile } from '../../src/learning/profile';
 import { emptyLearningRecord, sanitizeLearningRecord } from '../../src/learning/record';
 import { buildReviewSet, makeContextQuestion, makeItemQuestion, shuffle } from '../../src/learning/review';
 import { parseSave, SAVE_VERSION } from '../../src/game/state';
+import { defaultSettings } from '../../src/game/settings';
 
 /** 시드 고정 난수 */
 function seeded(seed: number) {
@@ -176,9 +177,9 @@ describe('복습 문제', () => {
 });
 
 describe('저장 데이터 버전 관리', () => {
-  it('1단계 저장 데이터(이름만)를 2단계 형식으로 옮긴다', () => {
+  it('1단계 저장 데이터(이름만)를 현재 형식으로 옮긴다', () => {
     const r = parseSave({ playerName: '  민지  ' })!;
-    expect(r.data).toEqual({ version: SAVE_VERSION, playerName: '민지', learning: emptyLearningRecord() });
+    expect(r.data).toEqual({ version: SAVE_VERSION, playerName: '민지', learning: emptyLearningRecord(), npcs: {}, settings: defaultSettings() });
     expect(r.fromFuture).toBe(false);
   });
 
@@ -198,6 +199,30 @@ describe('저장 데이터 버전 관리', () => {
     expect(Object.keys(r.data.learning.items)).toEqual(['w.bayt']);
     expect(r.data.learning.items['w.bayt'].box).toBe(5); // 범위 보정
     expect(r.data.learning.position).toEqual({ word: 3, sentence: 0 });
+  });
+
+  it('2단계 저장 데이터(학습 기록 포함)를 3단계로 옮기며 진도를 유지한다', () => {
+    const r = parseSave({ version: 2, playerName: 'A', learning: { items: { 'w.bayt': { firstStudiedAt: 5, box: 2, dueAt: 9, correct: 1 } }, position: { word: 2, sentence: 1 } } })!;
+    expect(r.data.version).toBe(3);
+    expect(r.data.learning.items['w.bayt'].box).toBe(2);
+    expect(r.data.learning.heard).toEqual({});
+    expect(r.data.learning.saved).toEqual([]);
+    expect(r.data.npcs).toEqual({});
+  });
+
+  it('3단계 주민 기억·설정을 검증하며 복원한다', () => {
+    const r = parseSave({
+      version: 3,
+      playerName: 'A',
+      learning: {},
+      npcs: { layla: { facts: [{ kind: 'name', value: 'سارة', evidence: 'اسمي سارة', at: 1 }, { kind: 'hack', value: 'x' }], friendship: 7, recent: [{ role: 'npc', text: 'مَرْحَبًا' }, { role: 'evil', text: 'x' }] }, 'BAD ID!': {} },
+      settings: { ttsEngine: 'audio', slow: true, addressGender: 'f', sttEngine: 'nope' },
+    })!;
+    expect(Object.keys(r.data.npcs)).toEqual(['layla']);
+    expect(r.data.npcs.layla.facts).toHaveLength(1);
+    expect(r.data.npcs.layla.recent).toHaveLength(1);
+    expect(r.data.npcs.layla.friendship).toBe(7);
+    expect(r.data.settings).toMatchObject({ ttsEngine: 'audio', slow: true, addressGender: 'f', sttEngine: 'auto', sttConsent: false });
   });
 
   it('미래 버전 데이터는 읽되 덮어쓰지 않도록 표시한다', () => {

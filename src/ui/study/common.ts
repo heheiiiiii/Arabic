@@ -8,7 +8,8 @@ import { listenButton, mixedText } from '../arabicText';
 export interface StudyContext {
   progress: LearningProgress;
   goMenu(): void;
-  openLesson(kind: ItemKind): void;
+  openLesson(kind: ItemKind, startId?: string): void;
+  openPhrases(): void;
   openReview(): void;
   /** 위쪽 학습 현황 막대를 다시 그린다 */
   refreshStats(): void;

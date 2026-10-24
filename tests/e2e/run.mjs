@@ -162,41 +162,30 @@ async function main() {
     const after = await page.evaluate(() => __t.feet());
     check('[회귀] 건물 한가운데 클릭 → 이동 거부', Math.hypot(after.x - before.x, after.y - before.y) < 0.5 && (await page.textContent('#toast')).includes('갈 수 없어요'));
 
-    // 라일라 대화
+    // 라일라 대화 (자유 회화 창)
     await moveTo(page, C(15), C(13));
     await clickWorld(page, C(17), C(11) - 4);
-    await page.waitForSelector('.dialogue', { timeout: 20000 });
+    await page.waitForSelector('.convo .entry--npc', { timeout: 20000 });
     const dlg = await page.evaluate(() => {
-      const ar = document.querySelector('.dialogue .ar--line');
-      return { ar: ar.textContent, dir: getComputedStyle(ar).direction, tag: document.querySelector('.learned-tag')?.textContent, listen: !!document.querySelector('.dialogue .btn-listen') };
+      const ar = document.querySelector('.convo .entry--npc .ar--chat');
+      return { ar: ar.textContent, dir: getComputedStyle(ar).direction, mode: document.querySelector('.mode-badge').dataset.mode, listen: !!document.querySelector('.convo .entry--npc .btn-listen') };
     });
-    check('[회귀] 주민 대화창 (아랍어 RTL)', dlg.ar === 'مَرْحَبًا!' && dlg.dir === 'rtl');
-    check('대화창: 듣기 버튼 + "책상에서 배울 수 있는 표현" 표시', dlg.listen && (dlg.tag ?? '').includes('배울 수 있는'), dlg.tag);
+    check('[회귀] 주민 클릭 → 대화창 (아랍어 RTL, 첫 인사)', dlg.ar.includes('مَرْحَبًا') && dlg.dir === 'rtl' && dlg.listen, JSON.stringify(dlg));
     const p0 = await page.evaluate(() => __t.feet());
     await page.mouse.click(200, 150);
     await sleep(400);
     const p1 = await page.evaluate(() => __t.feet());
     check('[회귀] 대화 중 마을 클릭 무시', Math.hypot(p1.x - p0.x, p1.y - p0.y) < 0.01);
-
-    // 실제 브라우저 음성: 이 환경에서 아랍어 음성이 없으면 안내가 나와야 한다
-    const realVoice = await page.evaluate(async () => {
-      const v = speechSynthesis.getVoices();
-      return { total: v.length, arabic: v.filter((x) => x.lang.startsWith('ar')).length };
-    });
-    await page.click('.dialogue .btn-listen');
-    await page.waitForFunction(() => document.querySelector('#toast').classList.contains('is-visible'), null, { timeout: 8000 }).catch(() => {});
-    const toast = await page.textContent('#toast');
-    check(`실제 음성 확인 (음성 ${realVoice.total}개, 아랍어 ${realVoice.arabic}개) → 재생 불가 안내`, realVoice.arabic > 0 || toast.includes('아랍어 음성이 없어요'), toast);
     await shot(page, '01-dialogue');
-    for (let i = 0; i < 6 && (await page.$('.dialogue')); i++) await page.click('.dialogue .btn--primary');
-    check('[회귀] 대화 끝까지 진행 후 닫힘', !(await page.$('.dialogue')));
+    await page.click('.convo [data-role=close]');
+    check('[회귀] 대화창 닫기', !(await page.$('.convo')));
 
     // ═════ 2. 책상 공부 메뉴 ═════
     await moveTo(page, C(9), C(8));
     await openStudy(page);
     check('[회귀] 집 출입 + 책상 접근 → 공부 메뉴', true);
     let stats = await statValues(page);
-    check('학습 현황: 기록 없음 상태 표시', stats[0] === '0 / 47' && stats[1] === '0 / 36' && stats[2] === '0' && stats[3].includes('인사와 안부'), stats.join(' | '));
+    check('학습 현황: 기록 없음 상태 표시', stats[0] === '0 / 49' && stats[1] === '0 / 43' && stats[2] === '0' && stats[3].includes('인사와 안부'), stats.join(' | '));
     await page.waitForFunction(() => !document.querySelector('.voice-status').textContent.includes('확인 중'));
     const voiceStatus = await page.textContent('.voice-status');
     check('음성 상태 안내 표시', voiceStatus.length > 5, voiceStatus);
@@ -220,18 +209,18 @@ async function main() {
     const reading = await page.textContent('.reading');
     check('발음 보조·부호 없는 표기 표시', reading.includes('marḥaban') && reading.includes('마르하반') && reading.includes('مرحبا'), reading);
     stats = await statValues(page);
-    check('처음 본 단어 → 단어 1 / 47, 복습 1', stats[0] === '1 / 47' && stats[2] === '1', stats.join(' | '));
+    check('처음 본 단어 → 단어 1 / 49, 복습 1', stats[0] === '1 / 49' && stats[2] === '1', stats.join(' | '));
     await shot(page, '03-word');
 
     for (let i = 0; i < 5; i++) await page.click('[data-nav=next]');
     stats = await statValues(page);
     const sixth = await page.getAttribute('.ar--hero', 'data-item-id');
-    check('다음 버튼으로 이동하며 학습 기록 (6개)', stats[0] === '6 / 47' && sixth === 'w.khayr', `${stats[0]} ${sixth}`);
+    check('다음 버튼으로 이동하며 학습 기록 (6개)', stats[0] === '6 / 49' && sixth === 'w.khayr', `${stats[0]} ${sixth}`);
     await page.click('[data-nav=prev]');
     await page.click('[data-nav=prev]');
     stats = await statValues(page);
     const back = await page.evaluate(() => ({ id: document.querySelector('.ar--hero').dataset.itemId, banner: !!document.querySelector('.new-banner') }));
-    check('이전 이동: 이미 배운 항목은 새로 세지 않음', stats[0] === '6 / 47' && back.id === 'w.sabah' && !back.banner, JSON.stringify(back));
+    check('이전 이동: 이미 배운 항목은 새로 세지 않음', stats[0] === '6 / 49' && back.id === 'w.sabah' && !back.banner, JSON.stringify(back));
     await page.keyboard.press('ArrowRight');
     check('키보드 → 로 다음 항목', (await page.getAttribute('.ar--hero', 'data-item-id')) === 'w.masa');
     const examples = await page.$$eval('.related__row .ar', (els) => els.map((e) => e.textContent));
@@ -252,7 +241,7 @@ async function main() {
     check('문장 ↔ 단어 관계 유지 (صَبَاحَ الْخَيْرِ → 아침, 좋은 것)', s4.id === 's.sabah_khayr' && s4.words.join() === 'w.sabah,w.khayr', JSON.stringify(s4));
     await shot(page, '04-sentence');
     stats = await statValues(page);
-    check('문장 4개 학습 기록', stats[1] === '4 / 36', stats.join(' | '));
+    check('문장 4개 학습 기록', stats[1] === '4 / 43', stats.join(' | '));
 
     // 복습
     await page.click('text=메뉴로');
@@ -353,10 +342,10 @@ async function main() {
     check('[회귀] 공부 메뉴에서 마을로 복귀', true);
     await moveTo(page, C(15), C(13));
     await clickWorld(page, C(17), C(11) - 4);
-    await page.waitForSelector('.dialogue', { timeout: 20000 });
-    const tag2 = await page.textContent('.learned-tag');
-    check('배운 뒤 대화창: "책상에서 배운 표현" 표시', tag2.includes('배운 표현이에요'), tag2);
-    await page.click('.dialogue .btn:not(.btn--primary):not(.btn-listen)');
+    await page.waitForSelector('.convo .entry--npc', { timeout: 20000 });
+    const tag2 = await page.textContent('.convo .entry--npc .bubble__tags');
+    check('배운 뒤 대화창: "배운 표현" 표시', tag2.includes('배운 표현'), tag2);
+    await page.click('.convo [data-role=close]');
 
     // ═════ 3. 저장·복원 ═════
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('arabic-village:v1')));
@@ -366,7 +355,7 @@ async function main() {
     await startGame(page);
     await openStudy(page);
     const stats2 = await statValues(page);
-    check('새로고침 후 학습 진도 복원', saved.version === 2 && Object.keys(saved.learning.items).length === 10 && stats2[0] === '6 / 47' && stats2[1] === '4 / 36', stats2.join(' | '));
+    check('새로고침 후 학습 진도 복원', saved.version === 3 && Object.keys(saved.learning.items).length === 10 && stats2[0] === '6 / 49' && stats2[1] === '4 / 43', stats2.join(' | '));
     await page.click('[data-topic=words]');
     check('이어서 배우기: 아직 안 배운 첫 단어부터', (await page.getAttribute('.ar--hero', 'data-item-id')) === 'w.nur');
     await page.keyboard.press('Escape');
@@ -383,7 +372,7 @@ async function main() {
     const oldName = await pOld.inputValue('#player-name');
     await startGame(pOld);
     const migrated = await pOld.evaluate(() => JSON.parse(localStorage.getItem('arabic-village:v1')));
-    check('1단계 저장 데이터(이름만) → 2단계로 이전', oldName === '옛 이름' && migrated.version === 2 && migrated.playerName === '옛 이름' && typeof migrated.learning === 'object', JSON.stringify(migrated).slice(0, 80));
+    check('1단계 저장 데이터(이름만) → 현재 버전(3)으로 이전', oldName === '옛 이름' && migrated.version === 3 && migrated.playerName === '옛 이름' && typeof migrated.learning === 'object', JSON.stringify(migrated).slice(0, 80));
     await ctxOld.close();
 
     // ═════ 5. 음성 재생 상태 (가짜 아랍어 음성 주입) ═════

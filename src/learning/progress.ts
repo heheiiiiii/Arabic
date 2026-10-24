@@ -1,5 +1,5 @@
 import { ALL_ITEMS, getItem, itemsOfKind, UNITS, type ItemKind, type StudyItem, type Unit } from './content';
-import { MAX_BOX, type ItemProgress, type LearningRecord } from './record';
+import { MAX_BOX, MAX_SAVED_PHRASES, type ItemProgress, type LearningRecord, type SavedPhrase } from './record';
 
 const MIN = 60_000;
 const DAY = 24 * 60 * MIN;
@@ -122,6 +122,63 @@ export class LearningProgress {
     }
     this.onChange();
     return { boxBefore, boxAfter: p.box, advanced };
+  }
+
+  // ── 대화와의 연결 ───────────────────────────────
+
+  /**
+   * 대화에서 이 학습 항목을 "들었다"고 기록한다. 학습 완료(markStudied)나 정답 기록과는 별개다.
+   * @returns 처음 들은 항목 ID 목록
+   */
+  recordHeard(ids: string[]): string[] {
+    const t = this.now();
+    const fresh: string[] = [];
+    for (const id of new Set(ids)) {
+      if (!getItem(id)) continue;
+      const h = this.record.heard[id];
+      if (h) {
+        h.count++;
+        h.lastAt = t;
+      } else {
+        this.record.heard[id] = { count: 1, lastAt: t };
+        fresh.push(id);
+      }
+    }
+    if (ids.length) this.onChange();
+    return fresh;
+  }
+
+  heardCount(id: string): number {
+    return this.record.heard[id]?.count ?? 0;
+  }
+
+  /** 대화에서 들었지만 책상에서 아직 배우지 않은 항목 (최근 순) */
+  heardNotStudied(): StudyItem[] {
+    return ALL_ITEMS.filter((i) => this.record.heard[i.id] && !this.isStudied(i.id)).sort(
+      (a, b) => this.record.heard[b.id].lastAt - this.record.heard[a.id].lastAt,
+    );
+  }
+
+  savedPhrases(): readonly SavedPhrase[] {
+    return this.record.saved;
+  }
+
+  isSaved(ar: string): boolean {
+    return this.record.saved.some((p) => p.ar === ar);
+  }
+
+  /** 대화 표현 저장 (같은 문장은 한 번만, 최대 개수를 넘으면 오래된 것부터 지운다) */
+  savePhrase(p: Omit<SavedPhrase, 'at'>): boolean {
+    if (this.isSaved(p.ar)) return false;
+    this.record.saved.unshift({ ...p, at: this.now() });
+    this.record.saved.length = Math.min(this.record.saved.length, MAX_SAVED_PHRASES);
+    this.onChange();
+    return true;
+  }
+
+  removePhrase(ar: string): void {
+    this.record.saved = this.record.saved.filter((p) => p.ar !== ar);
+    this.onChange();
   }
 
   status(id: string): ItemStatus {

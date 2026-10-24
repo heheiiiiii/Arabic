@@ -7,6 +7,7 @@ import { isSlowMode, setSlowMode } from '../arabicText';
 import { button, type StudyContext } from './common';
 import { renderLesson } from './LessonView';
 import { renderReview } from './ReviewView';
+import { renderPhrases } from './PhrasesView';
 
 /**
  * 집 책상의 공부 메뉴 (HTML 오버레이).
@@ -78,7 +79,8 @@ export class StudyUI {
     return {
       progress: learning(),
       goMenu: () => this.renderMenu(),
-      openLesson: (kind) => this.showView(() => renderLesson(this.view, this.context(), kind)),
+      openLesson: (kind, startId) => this.showView(() => renderLesson(this.view, this.context(), kind, startId)),
+      openPhrases: () => this.showView(() => renderPhrases(this.view, this.context())),
       openReview: () => this.showView(() => renderReview(this.view, this.context())),
       refreshStats: () => this.renderStats(),
       setKeyHandler: (fn) => (this.keyHandler = fn),
@@ -162,6 +164,18 @@ export class StudyUI {
               studiedTotal === 0 ? '먼저 표현을 배워 보세요' : s.dueCount ? `복습할 항목 ${s.dueCount}개` : '복습할 항목이 없어요 · 자유 연습',
               () => ctx.openReview(),
               'review',
+            ),
+            menuItem(
+              4,
+              '대화에서 만난 표현',
+              'مِنَ الْمُحَادَثَةِ',
+              (() => {
+                const heard = progress.heardNotStudied().length;
+                const saved = progress.savedPhrases().length;
+                return heard + saved === 0 ? '라일라와 대화하면 여기에 모여요' : `새로 들은 표현 ${heard}개 · 저장한 표현 ${saved}개`;
+              })(),
+              () => ctx.openPhrases(),
+              'phrases',
             ),
           ),
           el('h3', { class: 'related__title' }, '단원 진행'),

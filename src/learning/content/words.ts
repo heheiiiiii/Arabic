@@ -249,6 +249,16 @@ export const WORDS: StudyItem[] = [
     grammar: '동사 أَرَادَ(원하다)의 1인칭 현재형. 뒤의 명사는 목적격(-an)이 돼요.',
   },
   {
+    id: 'w.uhibbu', kind: 'word', unit: 'daily', difficulty: 2,
+    ar: 'أُحِبُّ', translit: 'uḥibbu', pron: '우힙부', ko: '(나는) 좋아해요',
+    grammar: '동사 أَحَبَّ(좋아하다)의 1인칭 현재형. 뒤의 명사는 목적격(-a)이 돼요.',
+  },
+  {
+    id: 'w.hal_q', kind: 'word', unit: 'daily', difficulty: 1,
+    ar: 'هَلْ', translit: 'hal', pron: '할', ko: '~인가요? (예/아니요 질문)',
+    grammar: '문장 앞에 붙여 예/아니요 질문을 만드는 말',
+  },
+  {
     id: 'w.jamil', kind: 'word', unit: 'daily', difficulty: 1,
     ar: 'جَمِيلٌ', translit: 'jamīlun', pron: '자밀룬', ko: '아름다운, 멋진',
     grammar: '형용사. 여성 명사를 꾸밀 때는 جَمِيلَةٌ',

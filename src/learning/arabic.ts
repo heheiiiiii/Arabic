@@ -53,6 +53,19 @@ export function comparisonKey(text: string): string {
     .replace(/[\u0623\u0625\u0622]/g, '\u0627');
 }
 
+/**
+ * 느슨한 정규화: 부호 제거 + 함자 자리 통일 + 문장부호 제거. 단어 사이 공백은 하나로 남긴다.
+ * (음성 인식 결과처럼 부호가 없는 문장을 단어 단위로 비교할 때 사용)
+ */
+export function looseNormalize(text: string): string {
+  return stripHarakat(text)
+    .replace(/[\u0623\u0625\u0622]/g, '\u0627')
+    .replace(/[\u0649]/g, '\u064A')
+    .replace(/[\u061F\u060C\u061B.!?,:"'«»()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** 끝의 문장부호를 뗀 형태 (대사 속에 학습 문장이 들어 있는지 확인할 때 사용). */
 export function trimPunctuation(text: string): string {
   return text.replace(/[\s.!?\u060C\u061F\u061B:]+$/u, '');

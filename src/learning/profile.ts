@@ -34,6 +34,8 @@ export interface LearnerProfile {
   comfortable: LearnerExpression[];
   /** 복습이 필요한 표현 */
   needsReview: LearnerExpression[];
+  /** 대화에서 들었지만 책상에서 아직 배우지 않은 표현 */
+  heardNotStudied: { id: string; ar: string; ko: string }[];
 }
 
 export function buildLearnerProfile(progress: LearningProgress): LearnerProfile {
@@ -69,5 +71,6 @@ export function buildLearnerProfile(progress: LearningProgress): LearnerProfile 
     reviewed: encountered.filter((e) => e.correct + e.wrong > 0),
     comfortable: encountered.filter((e) => e.familiarity !== 'seen'),
     needsReview: encountered.filter((e) => e.needsReview),
+    heardNotStudied: progress.heardNotStudied().map((i) => ({ id: i.id, ar: i.ar, ko: i.ko })),
   };
 }

@@ -85,6 +85,21 @@ export const SENTENCES: StudyItem[] = [
     usage: '헤어질 때 쓰는 인사예요. 떠나는 사람과 남는 사람 모두 쓸 수 있어요.',
   },
 
+  {
+    id: 's.wa_anta', kind: 'sentence', unit: 'greetings', difficulty: 1,
+    ar: 'وَأَنْتَ؟', translit: 'wa-anta?', pron: '와 안타?', ko: '(남성에게) 너는요?',
+    keyWords: ['w.anta'],
+    usage: '안부에 대답한 뒤 상대에게 되물을 때 써요.',
+    gender: { role: 'addressee', gender: 'm', pairId: 's.wa_anti' },
+  },
+  {
+    id: 's.wa_anti', kind: 'sentence', unit: 'greetings', difficulty: 1,
+    ar: 'وَأَنْتِ؟', translit: 'wa-anti?', pron: '와 안티?', ko: '(여성에게) 너는요?',
+    keyWords: ['w.anti'],
+    usage: '안부에 대답한 뒤 상대에게 되물을 때 써요.',
+    gender: { role: 'addressee', gender: 'f', pairId: 's.wa_anta' },
+  },
+
   // ── 자기소개 ─────────────────────────────
   {
     id: 's.ma_ismuka', kind: 'sentence', unit: 'introductions', difficulty: 1,
@@ -156,6 +171,11 @@ export const SENTENCES: StudyItem[] = [
     keyWords: ['w.ana', 'w.min', 'w.kuriya'],
   },
   {
+    id: 's.ana_min_misr', kind: 'sentence', unit: 'origin', difficulty: 1,
+    ar: 'أَنَا مِنْ مِصْرَ.', translit: 'anā min miṣr.', pron: '아나 민 미스르', ko: '저는 이집트에서 왔어요.',
+    keyWords: ['w.ana', 'w.min', 'w.misr'],
+  },
+  {
     id: 's.ana_kuri', kind: 'sentence', unit: 'origin', difficulty: 2,
     ar: 'أَنَا كُورِيٌّ.', translit: 'anā kūriyy.', pron: '아나 쿠리', ko: '저는 한국 사람이에요. (남성)',
     keyWords: ['w.ana', 'w.kuri'],
@@ -213,6 +233,32 @@ export const SENTENCES: StudyItem[] = [
     id: 's.urid_maa', kind: 'sentence', unit: 'daily', difficulty: 2,
     ar: 'أُرِيدُ مَاءً.', translit: 'urīdu māʾ.', pron: '우리두 마', ko: '물을 원해요. (물 주세요)',
     keyWords: ['w.uridu', 'w.maa'],
+  },
+  {
+    id: 's.uhibbu_qahwa', kind: 'sentence', unit: 'daily', difficulty: 2,
+    ar: 'أُحِبُّ الْقَهْوَةَ.', translit: 'uḥibbu l-qahwa.', pron: '우힙불 까흐와', ko: '저는 커피를 좋아해요.',
+    keyWords: ['w.uhibbu', 'w.qahwa'],
+    grammar: '좋아하는 대상 전체를 말할 때는 정관사 الـ를 붙여요.',
+  },
+  {
+    id: 's.uhibbu_shay', kind: 'sentence', unit: 'daily', difficulty: 2,
+    ar: 'أُحِبُّ الشَّايَ.', translit: 'uḥibbu sh-shāy.', pron: '우힙붓 샤이', ko: '저는 차를 좋아해요.',
+    keyWords: ['w.uhibbu', 'w.shay'],
+    grammar: 'ش는 태양 문자라서 정관사의 ل을 읽지 않고 ش를 두 번 읽어요.',
+  },
+  {
+    id: 's.hal_tuhibbu', kind: 'sentence', unit: 'daily', difficulty: 3,
+    ar: 'هَلْ تُحِبُّ الْقَهْوَةَ؟', translit: 'hal tuḥibbu l-qahwa?', pron: '할 투힙불 까흐와?', ko: '(남성에게) 커피 좋아해요?',
+    keyWords: ['w.hal_q', 'w.qahwa'],
+    grammar: 'تُحِبُّ = 너(남성)는 좋아한다',
+    gender: { role: 'addressee', gender: 'm', pairId: 's.hal_tuhibbina' },
+  },
+  {
+    id: 's.hal_tuhibbina', kind: 'sentence', unit: 'daily', difficulty: 3,
+    ar: 'هَلْ تُحِبِّينَ الْقَهْوَةَ؟', translit: 'hal tuḥibbīna l-qahwa?', pron: '할 투힙비날 까흐와?', ko: '(여성에게) 커피 좋아해요?',
+    keyWords: ['w.hal_q', 'w.qahwa'],
+    grammar: 'تُحِبِّينَ = 너(여성)는 좋아한다. 여성형 어미 ـِينَ(-īna)가 붙어요.',
+    gender: { role: 'addressee', gender: 'f', pairId: 's.hal_tuhibbu' },
   },
   {
     id: 's.min_fadlik', kind: 'sentence', unit: 'daily', difficulty: 2,

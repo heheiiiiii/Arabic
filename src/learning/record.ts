@@ -20,8 +20,30 @@ export interface ItemProgress {
   dueAt: number;
 }
 
+/** 대화에서 학습 항목을 들은 기록 (학습 완료와는 별개) */
+export interface HeardRecord {
+  count: number;
+  lastAt: number;
+}
+
+/** 플레이어가 대화에서 직접 저장한 표현 (AI 생성 문장일 수 있어 검증 표시를 함께 둔다) */
+export interface SavedPhrase {
+  ar: string;
+  ko: string;
+  translit?: string;
+  /** 'ai' = 실제 AI 문장(부호 자동 검사만 거침), 'practice' = 검토된 콘텐츠 문장 */
+  source: 'ai' | 'practice';
+  /** 서버 자동 검사에서 부호 의심 경고가 있었는지 */
+  uncertain: boolean;
+  at: number;
+}
+
+export const MAX_SAVED_PHRASES = 50;
+
 export interface LearningRecord {
   items: Record<string, ItemProgress>;
+  heard: Record<string, HeardRecord>;
+  saved: SavedPhrase[];
   /** 마지막으로 보던 위치 (단어/문장 목록의 인덱스) */
   position: { word: number; sentence: number };
 }
@@ -29,7 +51,7 @@ export interface LearningRecord {
 export const MAX_BOX = 5;
 
 export function emptyLearningRecord(): LearningRecord {
-  return { items: {}, position: { word: 0, sentence: 0 } };
+  return { items: {}, heard: {}, saved: [], position: { word: 0, sentence: 0 } };
 }
 
 const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
@@ -44,6 +66,27 @@ export function sanitizeLearningRecord(raw: unknown): LearningRecord {
   if (pos && typeof pos === 'object') {
     out.position.word = Math.max(0, Math.floor(num(pos.word, 0)));
     out.position.sentence = Math.max(0, Math.floor(num(pos.sentence, 0)));
+  }
+
+  if (r.heard && typeof r.heard === 'object') {
+    for (const [id, v] of Object.entries(r.heard as Record<string, unknown>)) {
+      const h = v as Record<string, unknown> | null;
+      if (h && typeof h.count === 'number' && h.count > 0) out.heard[id] = { count: Math.floor(h.count), lastAt: num(h.lastAt, 0) };
+    }
+  }
+  if (Array.isArray(r.saved)) {
+    for (const v of r.saved.slice(0, MAX_SAVED_PHRASES)) {
+      const sp = v as Record<string, unknown> | null;
+      if (!sp || typeof sp.ar !== 'string' || typeof sp.ko !== 'string' || sp.ar.length > 400) continue;
+      out.saved.push({
+        ar: sp.ar,
+        ko: sp.ko.slice(0, 300),
+        ...(typeof sp.translit === 'string' ? { translit: sp.translit.slice(0, 300) } : {}),
+        source: sp.source === 'practice' ? 'practice' : 'ai',
+        uncertain: sp.uncertain === true,
+        at: num(sp.at, 0),
+      });
+    }
   }
 
   const items = r.items;
