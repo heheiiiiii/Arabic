@@ -1,6 +1,6 @@
 import { looseNormalize } from '../learning/arabic';
 import { requireItem } from '../learning/content';
-import type { AddressGender, ArabicLine, ChatRequest, NpcReply } from './conversation';
+import type { ArabicLine, ChatRequest, Gender, NpcReply } from './conversation';
 
 /**
  * 규칙 기반 "연습 상대" (모의 NPC).
@@ -20,13 +20,14 @@ const join = (...parts: ArabicLine[]): ArabicLine => ({
   translit: parts.every((p) => p.translit) ? parts.map((p) => p.translit).join(' ') : undefined,
 });
 const raw = (ar: string, ko: string, translit?: string): ArabicLine => ({ ar, ko, ...(translit ? { translit } : {}) });
-const pick = (g: AddressGender, m: string, f: string): string | null => (g === 'm' ? m : g === 'f' ? f : null);
+/** 플레이어 성별에 맞는 학습 항목 ID */
+const pick = (g: Gender, m: string, f: string): string => (g === 'm' ? m : f);
 
 interface Topic {
   id: string;
-  /** 라일라가 이 주제를 꺼낼 때 하는 말 (성별에 따라 다를 수 있음) */
-  ask(g: AddressGender): ArabicLine;
-  hint(g: AddressGender): NpcReply['hint'];
+  /** 라일라가 이 주제를 꺼낼 때 하는 말 (플레이어 성별에 따라 다를 수 있음) */
+  ask(g: Gender): ArabicLine;
+  hint(g: Gender): NpcReply['hint'];
   topicKo: string;
 }
 
@@ -34,7 +35,7 @@ const TOPICS: Topic[] = [
   {
     id: 'howareyou',
     topicKo: '안부',
-    ask: () => L('s.kayfa_hal'),
+    ask: (g) => L(pick(g, 's.kayfa_haluka', 's.kayfa_haluki')),
     hint: () => ({
       words: [L('w.ana'), L('w.khayr'), L('w.shukran')],
       contextKo: '라일라가 안부를 물었어요. 잘 지낸다고 대답해 보세요.',
@@ -45,10 +46,7 @@ const TOPICS: Topic[] = [
   {
     id: 'name',
     topicKo: '이름',
-    ask: (g) => {
-      const q = pick(g, 's.ma_ismuka', 's.ma_ismuki');
-      return q ? join(L('s.ismi_layla'), L(q)) : L('s.ismi_layla');
-    },
+    ask: (g) => join(L('s.ismi_layla'), L(pick(g, 's.ma_ismuka', 's.ma_ismuki'))),
     hint: () => ({
       words: [L('w.ism'), L('w.ana')],
       contextKo: '라일라가 자기 이름을 말했어요. "제 이름은 ○○예요"라고 소개해 보세요. (اِسْمِي 뒤에 이름)',
@@ -59,24 +57,18 @@ const TOPICS: Topic[] = [
   {
     id: 'origin',
     topicKo: '출신지',
-    ask: (g) => {
-      const q = pick(g, 's.min_ayna_anta', 's.min_ayna_anti');
-      return q ? join(L('s.ana_min_misr'), L(q)) : L('s.ana_min_misr');
-    },
-    hint: () => ({
+    ask: (g) => join(L('s.ana_min_misr'), L(pick(g, 's.min_ayna_anta', 's.min_ayna_anti'))),
+    hint: (g) => ({
       words: [L('w.min'), L('w.kuriya')],
       contextKo: '라일라는 이집트에서 왔대요. 나는 어디에서 왔는지 말해 보세요.',
       model: L('s.ana_min_kuriya'),
-      alternatives: [requireItem('s.ana_kuri').ar, requireItem('s.ana_kuriyya').ar],
+      alternatives: [requireItem(pick(g, 's.ana_kuri', 's.ana_kuriyya')).ar],
     }),
   },
   {
     id: 'food',
     topicKo: '좋아하는 음료',
-    ask: (g) => {
-      const q = pick(g, 's.hal_tuhibbu', 's.hal_tuhibbina');
-      return q ? join(L('s.uhibbu_qahwa'), L(q)) : L('s.uhibbu_qahwa');
-    },
+    ask: (g) => join(L('s.uhibbu_qahwa'), L(pick(g, 's.hal_tuhibbu', 's.hal_tuhibbina'))),
     hint: () => ({
       words: [L('w.uhibbu'), L('w.shay'), L('w.qahwa')],
       contextKo: '라일라는 커피를 좋아한대요. 나는 무엇을 좋아하는지 말해 보세요.',
@@ -127,13 +119,13 @@ function detect(text: string): { intent: string; capture?: string } | null {
   return { intent: 'other' };
 }
 
-/** 이미 라일라가 꺼낸 주제 (대화 기록의 NPC 문장으로 판단) */
+/** 이미 라일라가 꺼낸 주제 (대화 기록의 NPC 문장으로 판단). 대화 중에 성별을 바꿨을 수 있어 두 형태를 다 본다. */
 function askedTopics(req: ChatRequest): Set<string> {
-  const said = req.history.filter((h) => h.role === 'npc').map((h) => h.text);
+  const said = req.history.filter((h) => h.role === 'npc').map((h) => looseNormalize(h.text));
   const out = new Set<string>();
   for (const topic of TOPICS) {
-    const key = looseNormalize(topic.ask(req.addressGender).ar);
-    if (said.some((s) => looseNormalize(s).includes(key))) out.add(topic.id);
+    const keys = (['m', 'f'] as const).map((g) => looseNormalize(topic.ask(g).ar));
+    if (said.some((s) => keys.some((k) => s.includes(k)))) out.add(topic.id);
   }
   return out;
 }

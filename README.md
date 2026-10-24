@@ -33,7 +33,7 @@ Node 20.19+ / 22.12+ 필요. 로컬 음성: `apt-get install espeak-ng ffmpeg`.
 | 라일라 대화 – 연습 모드(모의, 정해진 표현 인식) | ✅ (서버 없어도 브라우저 안에서 동작) | - |
 | 라일라 대화 – **실제 AI 자유 회화** | ❌ | `ANTHROPIC_API_KEY` |
 | 음성 출력 – 브라우저 아랍어 음성 | 기기에 아랍어 음성이 있을 때 | - |
-| 음성 출력 – 미리 만든 MP3 (학습 문장·연습 대화 232문장) | ✅ (정적 배포 포함) | - |
+| 음성 출력 – 미리 만든 MP3 (학습 문장·연습 대화 210문장) | ✅ (정적 배포 포함) | - |
 | 음성 출력 – 서버 합성 (AI 답변 등 새 문장) | ✅ espeak-ng (기계음) | 자연스러운 음성: `AZURE_SPEECH_KEY`+`AZURE_SPEECH_REGION` 또는 `OPENAI_API_KEY` |
 | 음성 입력 – 브라우저 인식 (Chrome 등, ar-SA) | 브라우저 지원 시 | - |
 | 음성 입력 – 서버 인식 (녹음 → 텍스트) | ❌ | `STT_API_KEY`/`OPENAI_API_KEY` (+ 선택 `STT_BASE_URL`) |
@@ -51,7 +51,8 @@ Node 20.19+ / 22.12+ 필요. 로컬 음성: `apt-get install espeak-ng ffmpeg`.
 
 ```
 src/                     브라우저 (Vite + TypeScript + Phaser 3, UI는 HTML/CSS)
-  game/                  장면·이동·저장(state.ts: 저장 v3), settings.ts
+  game/                  장면·이동·저장(state.ts: 저장 v4), settings.ts
+  game/art/person.ts     도트 사람 그리기 (마을 텍스처와 첫 화면 미리보기가 공용, 머리·눈 모양)
   learning/              학습 콘텐츠(content/), 진도·복습·학습자 프로필, 아랍어 처리(arabic.ts)
   conversation/          대화 세션(session.ts), API 클라이언트(client.ts), 주민 기억·친밀도(memory.ts)
   audio/speech.ts        음성 출력: 브라우저 음성 ↔ 오디오 파일(미리 만든 MP3 → /api/tts) 자동 전환
@@ -73,7 +74,7 @@ scripts/build-audio.ts   학습 문장 음성 미리 만들기
 ### 회화 흐름 (`ConversationSession`)
 
 1. 대화창을 열면 `/api/health`로 모드 결정: **실제 AI** / **연습 모드(모의)**(서버에 AI 키 없음) / **오프라인 연습(모의)**(서버 없음)
-2. 요청: 최근 대화 12턴 + 기억 요약 + 학습자 요약(`getLearnerProfile()` → 익숙한 표현·복습 필요 표현·본 표현, 단원, 수준) + 호칭 성별
+2. 요청: 최근 대화 12턴 + 기억 요약 + 학습자 요약(`getLearnerProfile()` → 익숙한 표현·복습 필요 표현·본 표현, 단원, 수준) + 플레이어 성별(`m`/`f`, 라일라가 이 성별로 부른다)
 3. 서버(AI): 구조화된 JSON 출력 → `parseReplyBody` 검증 → 하라카트 자동 검사(`findDiacriticIssues`) → 의심 문장만 부호 교정 1회(글자가 바뀌면 거부) → 남은 의심은 `diacriticsWarning`으로 UI 경고
 4. 클라이언트 게임 로직만 상태 변경: 친밀도(아랍어로 말할 때 +1, 하루 상한 6, 감점 없음), 기억(AI 제안 중 **플레이어가 실제로 한 말에 근거가 있는 것만** 저장), 대화에서 들은 학습 항목 기록(`recordHeard`, 학습 완료 아님)
 5. 실패 처리: 네트워크 단절 → 오프라인 연습으로 전환(명시), 그 밖의 오류(키 없음·제한 초과·서버 오류·시간 초과·잘못된 응답) → 종류 안내 + 다시 시도 / 연습 모드로 계속 (자동으로 가짜 응답을 넣지 않음)
@@ -88,10 +89,11 @@ scripts/build-audio.ts   학습 문장 음성 미리 만들기
 - 새 주민: `server/chat/persona.ts`에 성격 추가 + 마을에 `Villager` 배치 (기억은 `npcs[npcId]`에 따로 저장)
 - 새 공급자: `server/tts/types.ts`의 `TtsProvider` 구현 후 `tts/index.ts`에 등록 / `server/chat/anthropic.ts`를 본떠 채팅 공급자 추가
 
-### 저장 데이터 (`localStorage['arabic-village:v1']`, version 3)
+### 저장 데이터 (`localStorage['arabic-village:v1']`, version 4)
 
-`{ version, playerName, learning: { items, heard, saved, position }, npcs: { layla: { facts, recent, topics, conversations, friendship, … } }, settings }`
-v1(이름만)·v2(학습 기록) 데이터는 자동 이전되고, 더 새로운 버전은 덮어쓰지 않습니다. 녹음 원본은 어디에도 저장하지 않습니다.
+`{ version, playerName, player: { gender, appearance: { hairStyle, eyes } }, learning: { items, heard, saved, position }, npcs: { layla: { facts, recent, topics, conversations, friendship, … } }, settings }`
+v1(이름만)·v2(학습 기록)·v3(성별이 대화 설정에 있던 형식) 데이터는 자동 이전되고, 더 새로운 버전은 덮어쓰지 않습니다. 녹음 원본은 어디에도 저장하지 않습니다.
+성별(남/여)과 외형(머리·눈 모양)은 첫 화면에서 고릅니다. 성별은 꼭 골라야 하며(v3에서 '지정 안 함'이었다면 다시 고름), 대화창 설정에서도 바꿀 수 있고 연습 상대·AI 대화·책상 학습 설명에 모두 같은 값이 쓰입니다.
 대화창 **설정**에서 기억 보기·잊게 하기·관계 초기화·대화 기록 지우기를 할 수 있습니다.
 
 ## 아랍어 표기 원칙

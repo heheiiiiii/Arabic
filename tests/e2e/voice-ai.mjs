@@ -146,6 +146,7 @@ const AUDIO_PROBE = () => {
 async function enterAndTalk(page, url) {
   await page.goto(url);
   await page.waitForSelector('#player-name');
+  await page.click('label[for=gender-m]');
   await page.click('button[type=submit]');
   await page.waitForFunction(() => window.__arabicVillage?.game.scene.isActive('village'));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -238,7 +239,7 @@ try {
 
   // 텍스트 대화 + 친밀도
   await say(page, 'مرحبا');
-  check('A. 아랍어 입력 → 응답 (다음 주제 질문)', (await lastNpc(page)).includes('كَيْفَ الْحَالُ؟'), await lastNpc(page));
+  check('A. 아랍어 입력 → 응답 (다음 주제 질문)', (await lastNpc(page)).includes('كَيْفَ حَالُكَ؟'), await lastNpc(page));
   const notices = await page.$$eval('.convo .notice', (n) => n.map((x) => x.textContent).join(' / '));
   check('친밀도: 오늘 첫 대화 + 아랍어로 말함 (게임 로직)', notices.includes('오늘 첫 대화') && notices.includes('아랍어로 말했어요'), notices);
 
@@ -355,11 +356,11 @@ try {
   await page.click('[data-topic=phrases]');
   const heardRows = await page.$$eval('.phrase-list [data-item-id]', (n) => n.map((x) => x.dataset.itemId));
   const savedRows = await page.$$eval('.phrase-list .related__row:not([data-item-id])', (n) => n.length);
-  check('책상: 대화에서 들은 표현(학습 전)과 저장한 표현 표시', heardRows.includes('s.kayfa_hal') && savedRows >= 1, `heard=${heardRows.join(',')} saved=${savedRows}`);
-  await page.click('.phrase-list [data-item-id="s.kayfa_hal"] [data-role=learn-heard]');
+  check('책상: 대화에서 들은 표현(학습 전)과 저장한 표현 표시', heardRows.includes('s.kayfa_haluka') && savedRows >= 1, `heard=${heardRows.join(',')} saved=${savedRows}`);
+  await page.click('.phrase-list [data-item-id="s.kayfa_haluka"] [data-role=learn-heard]');
   const lessonItem = await page.getAttribute('.ar--hero', 'data-item-id');
   const heardChip = await page.textContent('.lesson__head');
-  check('들은 표현 → 바로 배우기 (대화에서 들은 횟수 표시)', lessonItem === 's.kayfa_hal' && heardChip.includes('대화에서'), heardChip);
+  check('들은 표현 → 바로 배우기 (대화에서 들은 횟수 표시)', lessonItem === 's.kayfa_haluka' && heardChip.includes('대화에서'), heardChip);
   await shot(page, '11-desk-phrases');
   await ctx.close();
 
@@ -432,6 +433,7 @@ try {
   watch(c, 'C');
   await c.goto(C.url + '/');
   await c.waitForSelector('#player-name');
+  await c.click('label[for=gender-m]');
   await c.click('button[type=submit]');
   await c.waitForFunction(() => document.querySelector('canvas'));
   await sleep(600);

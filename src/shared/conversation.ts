@@ -22,7 +22,9 @@ export const LIMITS = {
   recordSeconds: 15,
 } as const;
 
-export type AddressGender = 'm' | 'f' | 'unspecified';
+/** 플레이어의 성별. 주민이 플레이어를 부를 때(أَنْتَ/أَنْتِ)와 플레이어가 자기를 말할 때(طَالِبٌ/طَالِبَةٌ) 쓴다. */
+export type Gender = 'm' | 'f';
+export const isGender = (v: unknown): v is Gender => v === 'm' || v === 'f';
 
 export interface ChatTurn {
   role: 'player' | 'npc';
@@ -64,7 +66,8 @@ export interface ChatRequest {
   /** conversations: 지금 연 대화를 포함한 누적 대화 횟수 */
   memory: { facts: MemoryFact[]; topics: string[]; conversations: number };
   learner: LearnerSummary;
-  addressGender: AddressGender;
+  /** 플레이어의 성별 (주민이 이 성별로 플레이어를 부른다) */
+  addressGender: Gender;
 }
 
 export interface ArabicLine {
@@ -198,6 +201,7 @@ export function validateChatRequest(raw: unknown): ChatRequest | string {
   const topics = Array.isArray(mem.topics) ? (mem.topics as unknown[]).filter((t): t is string => isStr(t, 60)).slice(0, 12) : [];
   const l = (o.learner ?? {}) as Record<string, unknown>;
   const arr = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => isStr(x, 200)).slice(0, 40) : []);
+  if (!isGender(o.addressGender)) return 'addressGender는 m 또는 f여야 합니다';
   const learner: LearnerSummary = {
     level: typeof l.level === 'number' ? Math.min(3, Math.max(1, Math.round(l.level))) : 1,
     unitTitleKo: isStr(l.unitTitleKo, 40) ? l.unitTitleKo : '',
@@ -206,13 +210,12 @@ export function validateChatRequest(raw: unknown): ChatRequest | string {
     seenOnly: arr(l.seenOnly),
     studiedCount: typeof l.studiedCount === 'number' ? Math.max(0, Math.round(l.studiedCount)) : 0,
   };
-  const g = o.addressGender;
   return {
     npcId: o.npcId,
     playerText: typeof o.playerText === 'string' ? o.playerText.trim() : null,
     history,
     memory: { facts, topics, conversations: typeof mem.conversations === 'number' ? mem.conversations : 0 },
     learner,
-    addressGender: g === 'm' || g === 'f' ? g : 'unspecified',
+    addressGender: o.addressGender,
   };
 }

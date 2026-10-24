@@ -41,7 +41,7 @@ const chatBody = (playerText: string | null) => ({
   history: [],
   memory: { facts: [], topics: [], conversations: 0 },
   learner: { level: 1, unitTitleKo: '인사', comfortable: ['مَرْحَبًا'], needsReview: [], seenOnly: [], studiedCount: 1 },
-  addressGender: 'unspecified',
+  addressGender: 'm',
 });
 const post = (path: string, body: unknown, headers: Record<string, string> = { 'content-type': 'application/json' }) =>
   new Request(`http://localhost${path}`, { method: 'POST', headers, body: typeof body === 'string' || body instanceof Uint8Array ? (body as BodyInit) : JSON.stringify(body) });

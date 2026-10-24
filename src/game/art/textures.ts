@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { TILE } from '../config';
+import { drawPerson, playerLook, type Appearance } from './person';
 
 /**
  * [임시 그래픽] 외부 이미지 없이 사각형을 찍어 픽셀풍 텍스처를 만든다.
@@ -54,12 +55,10 @@ const C = {
   roofRedDark: 0x9e3f2c,
   roofBlue: 0x4a7fb5,
   roofBlueDark: 0x355f8a,
-  skin: 0xf1c27d,
-  skinDark: 0xd9a35f,
   outline: 0x3b2a20,
 };
 
-export function createTextures(scene: Phaser.Scene): void {
+export function createTextures(scene: Phaser.Scene, player: Appearance): void {
   // ── 지면 ──────────────────────────────────────────
   for (let v = 0; v < 3; v++) {
     make(scene, `grass-${v}`, TILE, TILE, (g) => {
@@ -259,19 +258,17 @@ export function createTextures(scene: Phaser.Scene): void {
   });
 
   // ── 캐릭터 ────────────────────────────────────────
-  // 플레이어: 정면(down)/뒷면(up) 각각 걷기 2프레임. 32x32, 발이 아래쪽.
+  // 플레이어: 정면(down)/뒷면(up) 각각 걷기 2프레임. 32x32, 발이 아래쪽. 머리·눈 모양은 첫 화면에서 고른 것.
   for (const facing of ['down', 'up'] as const) {
     for (let f = 0; f < 2; f++) {
-      make(scene, `player-${facing}-${f}`, 32, 32, (g) => drawPerson(g, facing, f, {
-        hair: 0x3b2a20, shirt: 0x3f7fbf, shirtDark: 0x2f6399, pants: 0x3a3f58, scarf: null,
-      }));
+      make(scene, `player-${facing}-${f}`, 32, 32, (g) => drawPerson(g, facing, f, playerLook(player), P));
     }
   }
   // 주민 라일라: 히잡을 쓴 모습. 대기 2프레임.
   for (let f = 0; f < 2; f++) {
     make(scene, `layla-${f}`, 32, 32, (g) => drawPerson(g, 'down', f === 0 ? 0 : 2, {
-      hair: 0x3b2a20, shirt: 0xd9824b, shirtDark: 0xb86a39, pants: 0x7b4f8e, scarf: 0x2e9c8f,
-    }));
+      hair: 0x3b2a20, shirt: 0xd9824b, shirtDark: 0xb86a39, pants: 0x7b4f8e, scarf: 0x2e9c8f, hairStyle: 'short', eyes: 'dot',
+    }, P));
   }
 
   // ── 표시용 ────────────────────────────────────────
@@ -296,59 +293,4 @@ export function createTextures(scene: Phaser.Scene): void {
     px(g, 3, 2, 1, 1, 0x3b2a20);
     px(g, 5, 2, 1, 1, 0x3b2a20);
   });
-}
-
-interface Palette {
-  hair: number;
-  shirt: number;
-  shirtDark: number;
-  pants: number;
-  scarf: number | null;
-}
-
-/** 16x16 도트 사람. step: 0 = 서기, 1 = 걷기(다리 교차), 2 = 숨쉬기(살짝 내려감) */
-function drawPerson(g: G, facing: 'down' | 'up', step: number, c: Palette): void {
-  const bob = step === 2 ? 1 : 0;
-  // 다리
-  if (step === 1) {
-    px(g, 5, 12, 2, 3, c.pants);
-    px(g, 9, 11, 2, 3, c.pants);
-    px(g, 5, 15, 2, 1, C.outline);
-    px(g, 9, 14, 2, 1, C.outline);
-  } else {
-    px(g, 5, 12, 2, 3, c.pants);
-    px(g, 9, 12, 2, 3, c.pants);
-    px(g, 5, 15, 2, 1, C.outline);
-    px(g, 9, 15, 2, 1, C.outline);
-  }
-  // 몸통
-  px(g, 4, 7 + bob, 8, 6 - bob, c.shirt);
-  px(g, 4, 11, 8, 1, c.shirtDark);
-  px(g, 3, 8 + bob, 1, 4, C.skin);
-  px(g, 12, 8 + bob, 1, 4, C.skin);
-  // 머리
-  const hy = bob;
-  if (c.scarf !== null) {
-    px(g, 4, 1 + hy, 8, 7, c.scarf);
-    px(g, 3, 3 + hy, 10, 6, c.scarf);
-    if (facing === 'down') {
-      px(g, 5, 3 + hy, 6, 4, C.skin);
-      px(g, 6, 4 + hy, 1, 1, C.outline);
-      px(g, 9, 4 + hy, 1, 1, C.outline);
-      px(g, 7, 6 + hy, 2, 1, C.skinDark);
-    }
-  } else {
-    px(g, 4, 1 + hy, 8, 6, C.skin);
-    px(g, 4, 0 + hy, 8, 2, c.hair);
-    px(g, 3, 1 + hy, 1, 4, c.hair);
-    px(g, 12, 1 + hy, 1, 4, c.hair);
-    if (facing === 'down') {
-      px(g, 4, 2 + hy, 8, 1, c.hair);
-      px(g, 6, 4 + hy, 1, 1, C.outline);
-      px(g, 9, 4 + hy, 1, 1, C.outline);
-      px(g, 7, 6 + hy, 2, 1, C.skinDark);
-    } else {
-      px(g, 4, 1 + hy, 8, 6, c.hair);
-    }
-  }
 }

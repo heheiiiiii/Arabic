@@ -3,7 +3,7 @@ import '@fontsource/noto-naskh-arabic/arabic-700.css';
 import './styles/main.css';
 
 import { createGame } from './game/createGame';
-import { getPlayerName, loadSave, setPlayerName } from './game/state';
+import { getPlayerName, getPlayerProfile, loadSave, setPlayerName, setPlayerProfile } from './game/state';
 import { getLearnerProfile, learning } from './learning';
 import { hud } from './ui/Hud';
 import { byId } from './ui/dom';
@@ -11,8 +11,9 @@ import { showStartScreen } from './ui/StartScreen';
 
 async function start(): Promise<void> {
   const saved = loadSave();
-  const name = await showStartScreen(saved?.playerName ?? null);
-  setPlayerName(name);
+  const choice = await showStartScreen(saved?.playerName ?? null, getPlayerProfile());
+  setPlayerName(choice.name);
+  setPlayerProfile({ gender: choice.gender, appearance: choice.appearance });
   hud.show(getPlayerName());
 
   const game = createGame(byId('game-root'));

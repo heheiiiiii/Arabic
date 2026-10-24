@@ -1,5 +1,5 @@
 import { getLearnerProfile, learning } from '../learning';
-import { getNpcRecord, getSettings, persist } from '../game/state';
+import { getNpcRecord, getPlayerGender, persist } from '../game/state';
 import type { ChatRequest, LearnerSummary, MemoryFact, NpcReply } from '../shared/conversation';
 import { LIMITS } from '../shared/conversation';
 import { practiceReply } from '../shared/practiceNpc';
@@ -132,7 +132,7 @@ export class ConversationSession {
       history: m.recent.slice(-LIMITS.historyTurns),
       memory: memoryForRequest(m),
       learner: learnerSummary(),
-      addressGender: getSettings().addressGender,
+      addressGender: getPlayerGender(),
     };
   }
 

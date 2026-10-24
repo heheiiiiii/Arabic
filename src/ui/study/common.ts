@@ -1,6 +1,7 @@
 import type { LearningProgress } from '../../learning';
 import type { ItemKind, StudyItem } from '../../learning/content';
-import { getUnit, plainOf } from '../../learning/content';
+import { getItem, getUnit, plainOf } from '../../learning/content';
+import { getPlayerGender } from '../../game/state';
 import { el } from '../dom';
 import { listenButton, mixedText } from '../arabicText';
 
@@ -61,13 +62,24 @@ export function readingInfo(item: StudyItem): HTMLElement {
   );
 }
 
+/** 성별 형태 설명. 플레이어가 고른 성별과 라일라(여성)를 기준으로 언제 쓰는지 알려 준다. */
+export function genderNote(info: NonNullable<StudyItem['gender']>): string {
+  const me = getPlayerGender();
+  const g = info.gender === 'm' ? '남성' : '여성';
+  if (info.role === 'addressee') {
+    const base = `${g}에게 말할 때 쓰는 형태예요.`;
+    if (info.gender === 'f') return base + (me === 'f' ? ' 라일라가 나에게, 내가 라일라에게 이렇게 말해요.' : ' 내가 라일라에게 말할 때 이 형태를 써요.');
+    return base + (me === 'm' ? ' 라일라가 나에게 이렇게 말해요.' : '');
+  }
+  const base = `${g}이(가) 자기를 말할 때 쓰는 형태예요.`;
+  if (info.gender === me) return base + ' 내가 말할 때 이 형태를 써요.';
+  const pair = info.pairId ? getItem(info.pairId) : undefined;
+  return base + (pair ? ` 나는 ${pair.ar}(이)라고 말해요.` : '');
+}
+
 export function notes(item: StudyItem): HTMLElement | null {
   const parts: HTMLElement[] = [];
-  if (item.gender) {
-    const who = item.gender.role === 'addressee' ? '말하는 상대' : '말하는 사람';
-    const g = item.gender.gender === 'm' ? '남성' : '여성';
-    parts.push(el('p', { class: 'note-line note-line--gender' }, `👥 ${who}이(가) ${g}일 때 쓰는 형태예요.`));
-  }
+  if (item.gender) parts.push(mixedText(`👥 ${genderNote(item.gender)}`, 'note-line note-line--gender'));
   if (item.grammar) parts.push(mixedText(`📐 ${item.grammar}`, 'note-line'));
   if (item.usage) parts.push(mixedText(`💬 ${item.usage}`, 'note-line'));
   return parts.length ? el('div', { class: 'notes' }, ...parts) : null;

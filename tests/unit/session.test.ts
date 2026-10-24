@@ -120,9 +120,9 @@ describe('대화 세션', () => {
     const { session } = await freshSession();
     const { learning } = await import('../../src/learning');
     await session.open();
-    await session.send('مرحبا'); // 응답: تَشَرَّفْنَا / كَيْفَ الْحَالُ؟ 등
-    expect(learning().heardCount('s.kayfa_hal')).toBeGreaterThan(0);
-    expect(learning().isStudied('s.kayfa_hal')).toBe(false);
-    expect(learning().heardNotStudied().map((i) => i.id)).toContain('s.kayfa_hal');
+    await session.send('مرحبا'); // 응답: أَهْلًا! كَيْفَ حَالُكَ؟ (성별을 고르기 전에는 남성형)
+    expect(learning().heardCount('s.kayfa_haluka')).toBeGreaterThan(0);
+    expect(learning().isStudied('s.kayfa_haluka')).toBe(false);
+    expect(learning().heardNotStudied().map((i) => i.id)).toContain('s.kayfa_haluka');
   });
 });

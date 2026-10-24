@@ -124,7 +124,7 @@ describe('모음 부호 표기', () => {
 
 describe('주민 대화와 학습 데이터 연결', () => {
   it('대사가 참조하는 학습 항목이 존재하고, 대사 안에 그 표현이 그대로 들어 있다', () => {
-    for (const line of LAYLA.greeting) {
+    for (const line of [...LAYLA.greeting('m'), ...LAYLA.greeting('f')]) {
       expect(hasHarakat(line.ar)).toBe(true);
       expect(findDiacriticIssues(line.ar)).toEqual([]);
       for (const ref of line.refs ?? []) {
