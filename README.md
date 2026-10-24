@@ -25,7 +25,9 @@ npm run dev          # http://localhost:5173  (게임 + /api 서버가 한 프�
 
 Node 20.19+ / 22.12+ 필요. 로컬 음성: `apt-get install espeak-ng ffmpeg`.
 
-GitHub Actions(`.github/workflows/ci.yml`)가 PR과 `main` 푸시마다 타입 검사·단위 테스트·빌드(`check`)와 브라우저 E2E(`e2e`)를 실행합니다.
+GitHub Actions(`.github/workflows/ci.yml`)가 PR과 `main` 푸시마다 타입 검사·단위 테스트·빌드(`check`), 브라우저 E2E(`e2e`), 운영 Docker 이미지 확인(`docker`)을 실행합니다.
+
+**배포**: `Dockerfile` + `render.yaml`로 Render에 올립니다. 순서는 [docs/DEPLOY.md](docs/DEPLOY.md)를 보세요.
 
 ## 기능 상태
 

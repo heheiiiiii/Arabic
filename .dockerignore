@@ -1,0 +1,10 @@
+node_modules
+dist
+.cache
+.git
+.github
+tests
+*.log
+.env
+.env.*
+!.env.example
