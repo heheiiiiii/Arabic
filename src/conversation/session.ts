@@ -77,6 +77,9 @@ export class ConversationSession {
     } else if (h.chat?.provider === 'anthropic') {
       this.state.mode = 'ai';
       this.state.modeDetail = `실제 AI (${h.chat.model ?? 'Claude'})`;
+    } else if (h.access === 'required') {
+      this.state.mode = 'practice';
+      this.state.modeDetail = '초대 코드를 입력하지 않아 연습 상대(모의)와 대화해요. 대화 설정에서 초대 코드를 넣으면 실제 AI와 대화할 수 있어요.';
     } else {
       this.state.mode = 'practice';
       this.state.modeDetail = 'AI 키가 설정되지 않아 연습 상대(모의)와 대화해요. 정해진 표현만 알아들어요.';

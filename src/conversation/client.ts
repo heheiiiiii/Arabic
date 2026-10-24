@@ -3,12 +3,14 @@ import { parseNpcReply, type ChatRequest, type NpcReply } from '../shared/conver
 /** 서버 상태 (/api/health). 서버가 없으면 online=false (정적 배포·오프라인) */
 export interface ServerHealth {
   online: boolean;
+  /** 초대 코드: open = 필요 없음, granted = 입력함, required = 필요하지만 아직 없음 (유료 기능은 꺼진 상태로 보고된다) */
+  access: 'open' | 'granted' | 'required';
   chat: { provider: 'anthropic' | 'practice'; model?: string } | null;
   tts: string[];
   stt: { provider: string; model: string; external: boolean; host: string } | null;
 }
 
-const OFFLINE: ServerHealth = { online: false, chat: null, tts: [], stt: null };
+const OFFLINE: ServerHealth = { online: false, access: 'open', chat: null, tts: [], stt: null };
 let healthPromise: Promise<ServerHealth> | null = null;
 
 export function apiBase(): string {
@@ -27,6 +29,7 @@ export function getHealth(force = false): Promise<ServerHealth> {
       const d = (await res.json()) as Partial<ServerHealth> & { tts?: { providers?: string[] } };
       return {
         online: true,
+        access: d.access === 'granted' || d.access === 'required' ? d.access : ('open' as const),
         chat: d.chat ?? null,
         tts: (d.tts as { providers?: string[] } | undefined)?.providers ?? [],
         stt: (d.stt as ServerHealth['stt']) ?? null,
@@ -34,11 +37,31 @@ export function getHealth(force = false): Promise<ServerHealth> {
     } catch {
       return OFFLINE;
     }
-  })().then((h) => {
+  })().then((h): ServerHealth => {
     if (!h.online) healthPromise = null;
     return h;
   });
   return healthPromise;
+}
+
+/**
+ * 초대 코드를 서버에 보내 확인받는다. 맞으면 서버가 쿠키를 주고, 서버 상태를 다시 확인한다.
+ * @returns 'ok' | 'wrong'(코드 틀림) | 'error'(서버 오류·네트워크)
+ */
+export async function submitAccessCode(code: string): Promise<'ok' | 'wrong' | 'error'> {
+  try {
+    const res = await fetch(`${apiBase()}api/access`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    if (res.status === 403) return 'wrong';
+    if (!res.ok) return 'error';
+    await getHealth(true);
+    return 'ok';
+  } catch {
+    return 'error';
+  }
 }
 
 export type ChatFailure =

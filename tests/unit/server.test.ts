@@ -23,7 +23,7 @@ async function mockServer(handler: (req: IncomingMessage, body: Buffer) => { sta
   return { url: `http://127.0.0.1:${port}`, seen, close: () => new Promise<void>((ok) => server.close(() => ok())) };
 }
 
-const ENV_KEYS = ['ANTHROPIC_API_KEY', 'VILLAGE_ANTHROPIC_BASE_URL', 'AI_TIMEOUT_MS', 'STT_API_KEY', 'STT_BASE_URL', 'OPENAI_API_KEY', 'AZURE_SPEECH_KEY', 'TTS_PROVIDERS', 'TTS_CACHE_DIR'];
+const ENV_KEYS = ['ANTHROPIC_API_KEY', 'VILLAGE_ANTHROPIC_BASE_URL', 'AI_TIMEOUT_MS', 'AI_DAILY_LIMIT', 'STT_API_KEY', 'STT_BASE_URL', 'STT_DAILY_LIMIT', 'OPENAI_API_KEY', 'AZURE_SPEECH_KEY', 'TTS_PROVIDERS', 'TTS_CACHE_DIR', 'ACCESS_CODE', 'CHAT_PER_MINUTE'];
 
 async function loadApp(env: Record<string, string> = {}) {
   for (const k of ENV_KEYS) delete process.env[k];
@@ -78,8 +78,21 @@ describe('API 서버 (키 없음 → 연습 모드)', () => {
     expect((await handleApi(post('/api/chat', { npcId: 'nobody', playerText: null, history: [] }), '2.2.2.2')).status).toBe(400);
     expect((await handleApi(post('/api/chat', 'x'.repeat(30_000)), '2.2.2.2')).status).toBe(413);
     let last = 0;
-    for (let i = 0; i < 25; i++) last = (await handleApi(post('/api/chat', chatBody('مرحبا')), '3.3.3.3')).status;
+    for (let i = 0; i < 65; i++) last = (await handleApi(post('/api/chat', chatBody('مرحبا')), '3.3.3.3')).status;
     expect(last).toBe(429);
+  });
+
+  it('분당 상한은 기본 60회이고 환경 변수로 바꿀 수 있다 (프록시 뒤에서 여러 사용자가 한 IP를 나눠 씀)', async () => {
+    const { handleApi } = await loadApp();
+    const statuses: number[] = [];
+    for (let i = 0; i < 61; i++) statuses.push((await handleApi(post('/api/chat', chatBody('مرحبا')), '3.3.3.4')).status);
+    expect(statuses.slice(0, 60).every((s) => s === 200)).toBe(true);
+    expect(statuses[60]).toBe(429);
+
+    const small = await loadApp({ CHAT_PER_MINUTE: '3' });
+    const r: number[] = [];
+    for (let i = 0; i < 4; i++) r.push((await small.handleApi(post('/api/chat', chatBody('مرحبا')), '3.3.3.5')).status);
+    expect(r).toEqual([200, 200, 200, 429]);
   });
 
   it('stt: 설정이 없으면 503 not_configured', async () => {
@@ -218,4 +231,86 @@ describe('Anthropic 공급자 (모의 Messages API 서버 — 실제 Claude 호�
       expect(d.source).toBeUndefined();
     }
   }, 20_000);
+});
+
+describe('초대 코드 (ACCESS_CODE)', () => {
+  const cookieOf = (res: Response) => (res.headers.get('set-cookie') ?? '').split(';')[0];
+  const withCookie = (req: Request, cookie: string) => {
+    const h = new Headers(req.headers);
+    h.set('cookie', cookie);
+    return new Request(req, { headers: h });
+  };
+
+  it('코드가 없으면 키가 있어도 연습 모드로 보고하고 연습 상대가 답한다 (AI 호출 없음)', async () => {
+    const { handleApi } = await loadApp({ ACCESS_CODE: 'salam-2026', ANTHROPIC_API_KEY: 'sk-test', VILLAGE_ANTHROPIC_BASE_URL: 'http://127.0.0.1:9', STT_API_KEY: 'x' });
+    const h = await (await handleApi(new Request('http://localhost/api/health'), '1.1.1.1')).json();
+    expect(h).toMatchObject({ access: 'required', chat: { provider: 'practice' }, stt: null });
+    const res = await handleApi(post('/api/chat', chatBody('مرحبا')), '1.1.1.1');
+    expect(res.status).toBe(200);
+    expect((await res.json()).source).toBe('practice');
+    const stt = await handleApi(post('/api/stt', new Uint8Array(5000), { 'content-type': 'audio/webm' }), '1.1.1.1');
+    expect(stt.status).toBe(403);
+  });
+
+  it('틀린 코드는 거부하고, 맞는 코드는 HttpOnly 쿠키를 준다. 쿠키가 있으면 유료 기능이 열린다', async () => {
+    const { handleApi } = await loadApp({ ACCESS_CODE: 'salam-2026', ANTHROPIC_API_KEY: 'sk-test' });
+    expect((await handleApi(post('/api/access', { code: 'wrong' }), '1.1.1.2')).status).toBe(403);
+    const ok = await handleApi(post('/api/access', { code: 'salam-2026' }), '1.1.1.2');
+    expect(ok.status).toBe(200);
+    const setCookie = ok.headers.get('set-cookie') ?? '';
+    expect(setCookie).toMatch(/HttpOnly/);
+    expect(setCookie).toMatch(/Path=\/api/);
+    expect(setCookie).not.toContain('salam-2026');
+    const h = await (await handleApi(withCookie(new Request('http://localhost/api/health'), cookieOf(ok)), '1.1.1.2')).json();
+    expect(h).toMatchObject({ access: 'granted', chat: { provider: 'anthropic' } });
+    const forged = await (await handleApi(withCookie(new Request('http://localhost/api/health'), `village_access=${'0'.repeat(64)}`), '1.1.1.2')).json();
+    expect(forged.access).toBe('required');
+  });
+
+  it('코드 맞히기 시도는 분당 10회로 제한한다', async () => {
+    const { handleApi } = await loadApp({ ACCESS_CODE: 'salam-2026' });
+    const statuses: number[] = [];
+    for (let i = 0; i < 11; i++) statuses.push((await handleApi(post('/api/access', { code: `guess-${i}` }), '1.1.1.3')).status);
+    expect(statuses.at(-1)).toBe(429);
+  });
+
+  it('코드를 설정하지 않으면 누구나 쓸 수 있다 (open)', async () => {
+    const { handleApi } = await loadApp();
+    expect((await (await handleApi(new Request('http://localhost/api/health'), '1.1.1.4')).json()).access).toBe('open');
+  });
+});
+
+describe('하루 상한 (비용 보호)', () => {
+  it('서버 음성 인식은 STT_DAILY_LIMIT을 넘으면 429', async () => {
+    const mock = await mockServer(() => ({ status: 200, body: { text: 'مرحبا' } }));
+    const { handleApi } = await loadApp({ STT_API_KEY: 'k', STT_BASE_URL: mock.url, STT_DAILY_LIMIT: '2' });
+    const r: number[] = [];
+    for (let i = 0; i < 3; i++) r.push((await handleApi(post('/api/stt', new Uint8Array(5000).fill(1), { 'content-type': 'audio/webm' }), `7.7.7.${i}`)).status);
+    expect(r).toEqual([200, 200, 429]);
+    await mock.close();
+  });
+
+  it('하라카트 교정 호출도 AI 하루 상한에 센다: 상한이 1이면 교정은 건너뛰고 경고만 남긴다', async () => {
+    let calls = 0;
+    const mock = await mockServer(() => {
+      calls++;
+      return {
+        status: 200,
+        body: {
+          id: 'msg', type: 'message', role: 'assistant', model: 'claude-opus-5-5', stop_reason: 'end_turn', stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+          content: [{ type: 'text', text: JSON.stringify({ reply: { ar: 'مرحبا! انا ليلى.', ko: '안녕', translit: 'm' }, understood: true, correction: null, hint: { words: [], contextKo: '', model: { ar: 'مَرْحَبًا!', ko: '안녕', translit: 'm' }, alternatives: [] }, memoryCandidates: [], topic: '인사' }) }],
+        },
+      };
+    });
+    const { handleApi } = await loadApp({ ANTHROPIC_API_KEY: 'sk-test', VILLAGE_ANTHROPIC_BASE_URL: mock.url, AI_DAILY_LIMIT: '1' });
+    const d = await (await handleApi(post('/api/chat', chatBody('مرحبا')), '8.8.8.1')).json();
+    expect(d.source).toBe('ai');
+    expect(d.diacriticsWarning).toEqual(['مرحبا! انا ليلى.']);
+    expect(calls).toBe(1);
+    const next = await handleApi(post('/api/chat', chatBody('مرحبا')), '8.8.8.1');
+    expect(next.status).toBe(429);
+    expect(calls).toBe(1);
+    await mock.close();
+  });
 });

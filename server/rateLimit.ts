@@ -4,7 +4,7 @@
  */
 const windows = new Map<string, number[]>();
 let day = '';
-let dayCount = 0;
+const dayCounts = new Map<string, number>();
 
 /** key(IP+경로)별로 windowMs 동안 max번까지 허용. 허용되면 true */
 export function allow(key: string, max: number, windowMs = 60_000, now = Date.now()): boolean {
@@ -19,20 +19,21 @@ export function allow(key: string, max: number, windowMs = 60_000, now = Date.no
   return true;
 }
 
-/** 하루 전체 상한 (AI 비용 보호). 허용되면 true */
-export function allowDaily(limit: number, now = new Date()): boolean {
+/** 하루 전체 상한 (비용 보호). key(ai·tts·stt)별로 따로 센다. 허용되면 true */
+export function allowDaily(key: string, limit: number, now = new Date()): boolean {
   const d = now.toISOString().slice(0, 10);
   if (d !== day) {
     day = d;
-    dayCount = 0;
+    dayCounts.clear();
   }
-  if (dayCount >= limit) return false;
-  dayCount++;
+  const count = dayCounts.get(key) ?? 0;
+  if (count >= limit) return false;
+  dayCounts.set(key, count + 1);
   return true;
 }
 
 export function resetRateLimits(): void {
   windows.clear();
   day = '';
-  dayCount = 0;
+  dayCounts.clear();
 }

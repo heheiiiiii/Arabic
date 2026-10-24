@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { parseReplyBody, type ChatRequest, type NpcReply } from '../../src/shared/conversation';
 import { config } from '../config';
 import { ProviderError } from '../http';
+import { allowDaily } from '../rateLimit';
 import { arabicFields, sameLetters, suspiciousArabic } from './diacritics';
 import type { Persona } from './persona';
 import { dynamicContext, REPLY_SCHEMA, stableInstructions, toMessages } from './prompt';
@@ -37,6 +38,8 @@ function mapError(e: unknown): ProviderError {
 }
 
 async function callJson(system: Anthropic.Beta.BetaTextBlockParam[], messages: Anthropic.Beta.BetaMessageParam[], schema: object, maxTokens: number) {
+  // 하루 상한은 요청이 아니라 모델 호출마다 센다 (하라카트 교정 호출 포함)
+  if (!allowDaily('ai', config.chat.dailyLimit)) throw new ProviderError('rate_limited', '오늘의 AI 대화 사용량을 모두 썼어요. 연습 모드로 계속할 수 있어요.');
   const res = await getClient().beta.messages.create({
     model: config.chat.model,
     max_tokens: maxTokens,

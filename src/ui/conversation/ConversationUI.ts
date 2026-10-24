@@ -1,6 +1,6 @@
 import { speech } from '../../audio/speech';
 import { browserSttSupported, recorderSupported, STT_MESSAGES, VoiceInput, type SttEngine } from '../../audio/recognizer';
-import { getHealth, type ServerHealth } from '../../conversation/client';
+import { getHealth, submitAccessCode, type ServerHealth } from '../../conversation/client';
 import { forgetFact, friendshipLevel } from '../../conversation/memory';
 import { ConversationSession, type Entry } from '../../conversation/session';
 import { getNpcRecord, getPlayerGender, getSettings, persist, resetNpcRecord, setPlayerGender, updateSettings } from '../../game/state';
@@ -501,6 +501,38 @@ export class ConversationUI {
     if (!this.settingsPanel.hidden) this.renderSettings();
   }
 
+  /** 초대 코드 입력 (서버가 초대 코드를 요구할 때만) */
+  private accessSetting(h: ServerHealth | null): HTMLElement[] {
+    if (!h?.online || h.access === 'open') return [];
+    if (h.access === 'granted') return [el('p', { class: 'muted small', 'data-role': 'access-ok' }, '초대 코드: 확인됨 (실제 AI·서버 음성 사용 가능)')];
+    const input = el('input', { type: 'password', autocomplete: 'off', placeholder: '초대 코드', 'aria-label': '초대 코드', 'data-role': 'access-code' }) as HTMLInputElement;
+    const submit = async () => {
+      const code = input.value.trim();
+      if (!code) return;
+      const r = await submitAccessCode(code);
+      if (r === 'ok') {
+        this.health = await getHealth();
+        this.updateMic();
+        showToast('초대 코드를 확인했어요. 대화창을 다시 열면 실제 AI와 대화해요.', 3600);
+        this.renderSettings();
+      } else {
+        showToast(r === 'wrong' ? '초대 코드가 맞지 않아요.' : '서버에 연결하지 못했어요. 잠시 후 다시 해 주세요.', 3000);
+      }
+    };
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') void submit();
+    });
+    return [
+      el(
+        'label',
+        { class: 'setting' },
+        el('span', {}, '초대 코드 (실제 AI 대화·서버 음성을 쓰려면 필요)'),
+        input,
+        btn('확인', () => void submit(), 'btn btn--tiny btn--primary', { 'data-role': 'access-submit' }),
+      ),
+    ];
+  }
+
   private renderSettings(): void {
     const s = getSettings();
     const select = <T extends string>(label: string, value: T, options: [T, string][], onChange: (v: T) => void) => {
@@ -548,10 +580,11 @@ export class ConversationUI {
       el(
         'p',
         { class: 'muted small' },
-        `연결 상태 — 대화: ${h?.online ? (h.chat?.provider === 'anthropic' ? `실제 AI (${h.chat.model})` : '연습 모드(모의, AI 키 없음)') : '서버 없음(오프라인 연습)'} · ` +
+        `연결 상태 — 대화: ${h?.online ? (h.chat?.provider === 'anthropic' ? `실제 AI (${h.chat.model})` : h.access === 'required' ? '연습 모드(모의, 초대 코드 없음)' : '연습 모드(모의, AI 키 없음)') : '서버 없음(오프라인 연습)'} · ` +
           `서버 음성: ${h?.tts.length ? h.tts.join(', ') : '없음'} · 서버 음성 인식: ${h?.stt ? h.stt.provider : '없음'} · ` +
           `브라우저 인식: ${browserSttSupported() ? '지원' : '미지원'} · 최근 재생 엔진: ${speech.lastEngine ?? '-'}`,
       ),
+      ...this.accessSetting(h),
       el('h3', { class: 'related__title' }, `${this.npc.nameKo}가 기억하는 것`),
       facts,
       el(
